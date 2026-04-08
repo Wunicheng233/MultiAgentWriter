@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第2章 - 江湖诛心铺 - 多Agent小说阅读器</title>
+    <style>
+        :root {
+            --bg-color: #f8f4e9;
+            --bg-paper: #fcf9f3;
+            --text-color: #2c2c2c;
+            --nav-bg: rgba(255, 255, 255, 0.96);
+            --border-color: #e6e2d8;
+            --link-color: #667eea;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --bg-paper: #1a1a1a;
+            --text-color: #d4d4d4;
+            --nav-bg: rgba(26, 26, 26, 0.96);
+            --border-color: #333;
+            --link-color: #8b9eff;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Serif SC", serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.8;
+            transition: background-color 0.3s;
+        }
+        .top-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--nav-bg);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 15px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn:hover {
+            background: var(--link-color);
+            border-color: var(--link-color);
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        .btn-primary {
+            background: var(--link-color);
+            border-color: var(--link-color);
+            color: white;
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            max-width: 50%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .container {
+            max-width: 750px;
+            margin: 70px auto 80px;
+            padding: 0 20px 120px 20px;
+            min-height: calc(100vh - 150px);
+        }
+        .content {
+            font-size: 1.1rem;
+            background: var(--bg-paper);
+            padding: 40px 30px 120px 30px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+        .content pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
+            margin: 0;
+        }
+        .content p {
+            margin-bottom: 1em;
+            text-indent: 2em;
+        }
+        .content h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1em;
+            text-align: center;
+        }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--nav-bg);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border-color);
+            padding: 10px 15px;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .toc-btn {
+            flex: 1;
+            text-align: center;
+        }
+        .toc-btn button {
+            width: 80%;
+        }
+        .prev-btn, .next-btn {
+            flex: 1;
+        }
+        .prev-btn button, .next-btn button {
+            width: 90%;
+        }
+        .toc-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--nav-bg);
+            z-index: 200;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            overflow-y: auto;
+            padding-top: 60px;
+        }
+        .toc-panel.open {
+            transform: translateX(0);
+        }
+        .toc-panel .close-btn {
+            position: fixed;
+            top: 10px;
+            right: 15px;
+            z-index: 201;
+        }
+        .toc-list {
+            list-style: none;
+            padding: 10px 20px;
+        }
+        .toc-list li {
+            border-bottom: 1px solid var(--border-color);
+        }
+        .toc-list a {
+            display: block;
+            padding: 12px 0;
+            color: var(--text-color);
+            text-decoration: none;
+        }
+        .toc-list a:hover {
+            color: var(--link-color);
+        }
+        .toc-list .current {
+            color: var(--link-color);
+            font-weight: 500;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 199;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s;
+        }
+        .overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .font-size-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        @media (max-width: 600px) {
+            .content {
+                font-size: 1.05rem;
+                padding: 20px 16px 140px 16px;
+            }
+            .container {
+                padding: 0 12px 140px 12px;
+            }
+            .title {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <div class="nav-left">
+            <button class="btn" onclick="window.location.href='../index.html'">📚 目录</button>
+            <button class="btn" id="themeToggle">🌓 换肤</button>
+            <div class="font-size-controls">
+                <button class="btn" onclick="changeFontSize(-1)">A-</button>
+                <button class="btn" onclick="changeFontSize(1)">A+</button>
+            </div>
+        </div>
+        <div class="title" id="pageTitle">第2章 僧袍换嫁衣 首富登门来</div>
+    </div>
+
+    <div class="container">
+        <div class="content">
+            <pre>第2章 僧袍换嫁衣 首富登门来
+
+刚把笔搁回笔架，店门又被轻轻推开。
+
+来人穿洗得发灰的僧袍，攥着颗颗磨亮的佛珠，皱纹深得像黄土坡沟壑，正是峨眉静云师太。
+
+金不换早年跑江湖，各派首脑的样貌早就刻进脑子里，那股峨眉特有的清寒气，哪怕换了打扮也瞒不过他。
+
+他没点破，只指尖搭着桌沿，懒懒散散等对方开口。
+
+静云师太走到八仙桌前，掏出叠成豆腐块的五百两银票，放到桌面上。
+
+“金先生，我要你帮我诛自己的心。”
+
+金不换手指叩了叩桌面，漫不经心开口。
+
+“开铺这么久，第一次见人要诛自己的心。说说吧，想要什么结果。”
+
+静云师太攥紧佛珠，指节用力到泛白，沉默半天才挤出声音。
+
+那声音哑得像缺了油的旧木门轴，压着三十年的尘：“我当年是峨眉俗家弟子，山下遇着赶考书生，两情相悦，私定了终身。”
+
+“后来书生家族遭难，被仇家追杀躲进山。师父说他是不祥人，要连累门派，给我两个选择——要么亲手杀他，要么剃度出家，永断红尘。”
+
+“我舍不得杀他，就剃了光头，换上了僧袍。”
+
+金不换倒了杯凉白开，顺势推到她面前。
+
+“后来呢？”
+
+“后来仇家找到了，把他抓走。我以为他早死了，直到上个月，香客带信说他还活着，在江南乌镇等了我三十年，现在肺痨加重，撑不了几天了。”
+
+她抬起头，浑浊眼睛里攒着细碎的光，亮得像埋了几十年的炭火，终于重新透出火星：“我想下山找他，可现在我是峨眉掌门，几百弟子看着，抛不下这袈裟，也放不下这个身份。”
+
+金不换捏起银票晃了晃，纸页发出脆生生的哗啦声。
+
+“五百两够了。”
+
+静云师太身体前倾，声音带着急切的颤音：“你要我怎么做？”
+
+“我写封信，你带回山门当众读出来。”金不换指尖点了点铺开的宣纸，“信里会撕碎你藏了一辈子的体面，诛掉‘峨眉掌门静云’，剩下的，才是当年跟书生定情的那个小丫头。”
+
+静云师太咬着下唇，唇色很快褪得发白，她没有犹豫，狠狠点了头。
+
+“好，我听你的。”
+
+狼毫笔蘸饱松烟墨，金不换运笔飞快，没半刻钟就写完。
+
+叠好塞进牛皮信封，工工整整落了字，他再次叮嘱：“记住，必须当众读，不能偷偷看。”
+
+静云师太双手接过信封，合十低了低头，转身轻步走了。
+
+僧袍下摆扫过门槛，没带出一丝风响。
+
+金不换望着她佝偻的背影消失在巷口，长舒一口气。
+
+柜台上那杯凉白开，已经被夕阳晒得温了。
+
+三天后，这件事炸遍了整个江南江湖。
+
+有人说，静云师太在峨眉山门当众读完，当场哭倒，哭完烧了袈裟，脱下僧袍，换了一身早年偷偷裁好的素色嫁衣，拿了攒半辈子的细软就下了山。
+
+有人说，她读完信当场砸了掌门玉印，只留了一句话：“当了三十年静云，该做回我自己了。”
+
+经此一事，诛心铺一夜之间传遍江南，连街头卖菜的阿婆都知道，城门下有个金先生，写几个字就能戳到人心里最软也最疼的地方。
+
+消息传得快，没到下午，就迎来了下一个客人。
+
+来人穿一身织金锦绣的丝绸长衫，腰系价值不菲的和田玉带，拇指套着整块羊脂玉扳指，不用开口，也知道是江南首富沈万钱。
+
+身后跟着两个膀大腰圆的随从，各拎一只沉甸甸的樟木箱子，放下的时候，地砖都震得嗡嗡响。
+
+“金先生，久仰大名。”沈万钱声音尖细，不停搓手，额角渗着细汗。
+
+金不换放下翻了一半的旧话本，斜靠在柜台上看着他。
+
+“沈大首富驾临，小店真是添光。”
+
+“听说你三言点醒屠千刀，一纸放了静云师太，我今天来，想请你帮个忙。”
+
+他掏出一叠一千两的银票，整整齐齐码在桌上，票号是江南老字号百川通，纸页厚实，印泥还带着新鲜墨香。
+
+“什么忙？”金不换捏起一张银票掂了掂。
+
+“我有个堂兄弟叫沈万两，当年一起下南洋做生意，后来分家闹了别扭。这些年他到处骂我不义，说我侵吞他的家产，还逼死了他的小儿子。”
+
+沈万钱脸涨得像煮熟的虾，眼神躲躲闪闪，不敢跟金不换对视。
+
+金不换扯了扯嘴角。
+
+“一千两不够。”
+
+沈万钱急得往前凑了半步：“加多少？两千？三千？只要能办，多少钱我都出！”
+
+“不用加钱。”金不换摇了摇头，把银票推回去半步，“我先把话说在前头，我不帮你堵他的嘴，我只帮你了了这件事。按我们铺子里的规矩，写完之后，结果如何概不负责，你能接受，我就写。”
+
+沈万钱愣了愣，眼珠转了两圈，料想金不换不过是要把话说得更狠些，总能帮自己压下沈万两，当即连连点头：“能接受能接受，一切听金先生安排！”
+
+金不换握笔在手，唰唰几笔就写完，信封上写了“沈万两亲启”五个大字，封好口递过去。
+
+“让你的随从送过去，必须亲手交到他手里。”
+
+沈万钱接过信封，立刻塞给随从：“快去快回！”
+
+当天傍晚，沈万钱又来了。
+
+他脸色惨白得像张白纸，双手抖得跟筛糠似的，手里攥着那封被撕得皱巴巴的信，进门就哑着嗓子喊。
+
+“金先生！你真的把这事抖出来了！”
+
+金不换接过信，展开扫了一眼，内容其实很简单：
+
+当年沈万两幼子得急病，要五十两银子抓药，沈万钱说周转不开拿不出。
+
+孩子咽气第三天，他花五十两买了只官窑花瓶，供在了自己的博古架上。
+
+如今他住的朱门大院，地基是沈万两用命拼下来的，家产有一半是沈万两帮他赚的。吞了人家的一切，还怕人家骂一句？
+
+“你明知道我要的是堵他的嘴！”沈万钱攥着拳头，脖子上青筋暴起。
+
+金不换放下信，语气平平淡淡：“你进门的时候我就说清楚了，结果概不负责。你说说看，现在沈万两还骂你吗？”
+
+沈万钱一下子僵在原地，胸口起伏半天，才回过味来。
+
+是啊，自从信被沈万两贴满江南所有城门码头，沈万两就再也没骂过他，连自己家门都很少出了。
+
+现在全江南的人，都替沈万两骂他，轮不到沈万两开口了。
+
+“出门概不负责，这是诛心铺的规矩，你进门就该听过。”金不换重新靠回柜边，手指敲了敲柜边木纹。
+
+沈万钱攥着拳头站了半天，最终一个字都没说出来，垂着头灰溜溜走了。
+
+从那之后，江南首富的朱门天天紧紧关着，半年多没见沈万钱出来赴宴显摆。
+
+当天深夜，月光把青石板路照得像铺了层白霜，长街上连打更的梆子声都远得模糊。
+
+一辆黑色软轿悄无声息停在诛心铺门口，落轿的时候连一点声响都没有。
+
+轿帘掀开，走出一个穿青色宫装的宫女，手里捧着个红漆描金的锦盒，脚步轻得没踩出半分尘土。
+
+她指尖叩了叩木门，声音清脆，像檐下挂着的铜铃铛，被晚风一吹晃出轻响。
+
+锦盒打开，里面躺着一张一万两的银票，盖着皇家内库的朱红印章，明黄色绫边在月光下晃得人眼晕。
+
+“我家主子说，这次的目标，是武林盟主慕容天。”
+
+软轿停在阴影里，轿中人没出声，只有一股龙涎香的味道顺着晚风飘进铺子里，混着墨香，格外刺人。</pre>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="prev-btn">
+            
+            <button class="btn btn-primary" onclick="window.location.href='../read/chapter_1.html'">← 上一章</button>
+            
+        </div>
+        <div class="toc-btn">
+            <button class="btn" id="openToc">📖 目录</button>
+        </div>
+        <div class="next-btn">
+            
+            <button class="btn btn-primary" onclick="window.location.href='../read/chapter_3.html'">下一章 →</button>
+            
+        </div>
+    </div>
+
+    <div class="toc-panel" id="tocPanel">
+        <button class="btn close-btn" id="closeToc">✕ 关闭</button>
+        <ul class="toc-list">
+            
+            <li>
+                <a href="../read/chapter_1.html" >
+                    第1章 开张第一单，骂我亲娘
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_2.html" class="current">
+                    第2章 僧袍换嫁衣 首富登门来
+                </a>
+            </li>
+            
+            <li>
+                <a href="../read/chapter_3.html" >
+                    第3章 万金买帖诛盟主
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_4.html" >
+                    第4章 诛心帖出，盟主暴毙亡命逃
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_5.html" >
+                    第5章 龙涎香露合谋局
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_6.html" >
+                    第6章 贴遍江南的谋反信
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_7.html" >
+                    第7章 两万两封口费与盟主的邀约
+                </a>
+            </li>
+            
+            <li>
+                <a href="./chapter_8.html" >
+                    第8章 重开诛心铺新帖接皇城事
+                </a>
+            </li>
+            
+        </ul>
+    </div>
+
+    <div class="overlay" id="overlay"></div>
+
+    <script>
+        // 主题切换
+        const themeToggle = document.getElementById('themeToggle');
+        const html = document.documentElement;
+        let currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        themeToggle.addEventListener('click', () => {
+            const newTheme = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+
+        // 字号调整
+        let currentFontSize = parseFloat(localStorage.getItem('fontSize')) || 1.1;
+        document.querySelector('.content').style.fontSize = currentFontSize + 'rem';
+        function changeFontSize(delta) {
+            currentFontSize += delta * 0.05;
+            currentFontSize = Math.max(0.9, Math.min(1.4, currentFontSize));
+            document.querySelector('.content').style.fontSize = currentFontSize + 'rem';
+            localStorage.setItem('fontSize', currentFontSize);
+        }
+
+        // 目录面板
+        const tocPanel = document.getElementById('tocPanel');
+        const overlay = document.getElementById('overlay');
+        const openToc = document.getElementById('openToc');
+        const closeToc = document.getElementById('closeToc');
+
+        openToc.addEventListener('click', () => {
+            tocPanel.classList.add('open');
+            overlay.classList.add('show');
+        });
+
+        function closeTocPanel() {
+            tocPanel.classList.remove('open');
+            overlay.classList.remove('show');
+        }
+
+        closeToc.addEventListener('click', closeTocPanel);
+        overlay.addEventListener('click', closeTocPanel);
+
+        // 自动处理段落格式化（把换行转成p标签）
+        // 这里保持pre格式因为内容已经有正确换行了
+    </script>
+</body>
+</html>
