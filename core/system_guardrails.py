@@ -13,7 +13,7 @@ from typing import List, Optional, Dict
 from pathlib import Path
 
 from utils.logger import logger
-from config import BASE_DIR
+from config import ROOT_DIR
 
 
 # 默认配置
@@ -337,7 +337,7 @@ def check_era_consistency(content: str, era_key: str, era_vocab: Dict = None) ->
 
 def load_guardrails_config() -> Dict:
     """加载防护配置，如果配置文件不存在则使用默认配置。"""
-    config_path = BASE_DIR / "guardrails_config.yaml"
+    config_path = ROOT_DIR / "guardrails_config.yaml"
     if config_path.exists():
         with open(config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
