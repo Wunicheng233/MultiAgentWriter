@@ -21,6 +21,7 @@ import {
   restoreChapterVersion,
   type ChapterVersionInfo,
 } from '../utils/endpoints'
+import api from '../utils/api'
 import { useToast } from '../components/Toast'
 
 // 精简架构：仅 4 个核心 Agent
@@ -49,6 +50,71 @@ export const Editor: React.FC = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
   const [waitingConfirmChapter, setWaitingConfirmChapter] = useState<number | null>(null)
+  const [planPreview, setPlanPreview] = useState<string>('')
+
+  // 简单 markdown 渲染
+  const renderMarkdown = (text: string) => {
+    // 处理 markdown 表格
+    const lines = text.split('\n');
+    const processedLines: string[] = [];
+    let tableStarted = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        if (!tableStarted) {
+          processedLines.push('<table class="border-collapse my-3 w-full bg-bg rounded border border-border overflow-hidden">');
+          tableStarted = true;
+        }
+        // 分割单元格
+        const cells = line.split('|').filter(c => c.trim().length > 0);
+        // 判断是否是分隔线行 (| :--- | :--- |)
+        const isSeparator = cells.every(c => /^[\s\-:]+$/.test(c.trim()));
+        if (isSeparator) {
+          continue;
+        }
+        processedLines.push('  <tr>');
+        cells.forEach(cell => {
+          processedLines.push(`    <td class="border border-border p-2 align-top">${cell.trim()}</td>`);
+        });
+        processedLines.push('  </tr>');
+      } else {
+        if (tableStarted) {
+          processedLines.push('</table>');
+          tableStarted = false;
+        }
+        if (line.trim()) {
+          processedLines.push(line);
+        }
+      }
+    }
+    if (tableStarted) {
+      processedLines.push('</table>');
+    }
+
+    let html = processedLines.join('\n');
+
+    // 处理标题、粗体等
+    html = html
+      .replace(/^# (.*)$/gm, '<h1 class="text-xl font-bold mb-2 mt-4">$1</h1>')
+      .replace(/^## (.*)$/gm, '<h2 class="text-lg font-semibold mb-2 mt-3">$1</h2>')
+      .replace(/^### (.*)$/gm, '<h3 class="text-base font-semibold mb-1 mt-2">$1</h3>')
+      .replace(/\*\*(.*)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*)\*/g, '<em>$1</em>')
+      .replace(/\[(.*)\]\((.*)\)/g, '<a href="$2" class="underline text-sage">$1</a>')
+      .replace(/^- /gm, '<li class="ml-4 list-disc">')
+      .replace(/\n\n+/g, '</p><p>');
+
+    // 包装段落
+    if (!html.startsWith('<h') && !html.startsWith('<table') && !html.startsWith('<li')) {
+      html = '<p>' + html;
+    }
+    if (!html.endsWith('</table>') && !html.endsWith('</h1>') && !html.endsWith('</h2>') && !html.endsWith('</h3>') && !html.endsWith('</li>')) {
+      html = html + '</p>';
+    }
+
+    return html;
+  };
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -58,6 +124,12 @@ export const Editor: React.FC = () => {
   const { data: chapter, isLoading } = useQuery({
     queryKey: ['chapter', projectId, chapterIdx],
     queryFn: () => getChapter(projectId, chapterIdx),
+    // 只有在以下情况才查询章节：
+    // 1. 没有正在进行的生成任务，用户正常编辑
+    // 2. 正在等待确认，并且是章节确认（不是策划确认）
+    enabled: pollingTaskId === null || (waitingConfirmChapter !== null && waitingConfirmChapter > 0),
+    // 禁用错误重试，避免连续弹出"章节不存在"错误
+    retry: false,
   })
 
   // 根据当前进度和当前步骤更新 Agent 状态
@@ -281,6 +353,16 @@ export const Editor: React.FC = () => {
         if (status.db_status === 'waiting_confirm') {
           clearInterval(interval)
           setWaitingConfirmChapter(status.current_chapter)
+          // 如果是策划方案确认，加载预览
+          if (status.current_chapter === 0) {
+            try {
+              const res = await api.get(`/projects/${projectId}/plan-preview`);
+              setPlanPreview(res.data.preview);
+            } catch (e) {
+              setPlanPreview('无法加载策划方案预览');
+              console.error('Failed to load plan preview', e);
+            }
+          }
           setShowConfirmDialog(true)
           return
         }
@@ -346,7 +428,8 @@ export const Editor: React.FC = () => {
       const res = await confirmTask(pollingTaskId, approved, feedbackText)
       setShowConfirmDialog(false)
       showToast('已提交确认，任务继续生成', 'success')
-      // 开始轮询新任务
+      // 开始轮询新任务，清除等待确认状态
+      setWaitingConfirmChapter(null)
       setPollingTaskId(res.new_task_id)
       setFeedbackText('')
     } catch (e: any) {
@@ -499,14 +582,52 @@ export const Editor: React.FC = () => {
 
       {/* 人工确认对话框 */}
       {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-lg">
-            <h3 className="text-xl font-medium mb-4">
-              第{waitingConfirmChapter}章已生成，请确认
-            </h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            // 点击背景关闭对话框
+            setShowConfirmDialog(false);
+          }}
+        >
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-medium">
+                {waitingConfirmChapter === 0
+                  ? '策划方案已生成，请确认'
+                  : `第${waitingConfirmChapter}章已生成，请确认`
+                }
+              </h3>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => setShowConfirmDialog(false)}
+                className="!px-2"
+              >
+                ✕
+              </Button>
+            </div>
             <p className="text-secondary mb-6">
-              你可以选择直接通过，继续生成下一章，或者输入修改意见让AI重新优化当前章节。
+              {waitingConfirmChapter === 0
+                ? '你可以选择直接通过，开始生成章节，或者输入修改意见让AI重新调整策划方案。'
+                : '你可以选择直接通过，继续生成下一章，或者输入修改意见让AI重新优化当前章节。'
+              }
             </p>
+            {/* 预览内容 */}
+            {waitingConfirmChapter === 0 && project && project.file_path && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">策划方案预览：</label>
+                <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(planPreview || '加载中...') }}
+                />
+              </div>
+            )}
+            {waitingConfirmChapter !== 0 && chapter && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">章节预览：</label>
+                <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: chapter.content || '' }}
+                />
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">

@@ -54,8 +54,8 @@ export const ReaderCore: React.FC<ReaderCoreProps> = ({
         const marginPercent = parseFloat(actualMargin);
         const marginPx = rect.width * (marginPercent / 100);
         const width = rect.width - marginPx;
-        // 减去上下一些边距
-        const height = rect.height - 40;
+        // 减去：提示文字(约50px) + 分页控件(约50px) + 一些边距
+        const height = rect.height - 120;
         setContainerSize({ width, height });
       }
     };
@@ -155,13 +155,13 @@ export const ReaderCore: React.FC<ReaderCoreProps> = ({
     const currentPageData = pages[currentPage - 1];
     if (!currentPageData) return null;
 
-    // 分页模式下，每行已经被分割好了，直接用 <p> 包装
-    const lines = currentPageData.content.split('\n');
+    // 分页模式下，按段落分组（空行分隔），每个段落添加首行缩进
+    const paragraphs = currentPageData.content.split('\n').filter(p => p.trim());
     return (
-      <div className="h-full space-y-0">
-        {lines.map((line, idx) => (
+      <div className="h-full space-y-[calc(var(--reader-font-size)*0.5)]">
+        {paragraphs.map((para, idx) => (
           <p key={idx} className="text-[var(--reader-text)] leading-[var(--reader-line-height)] text-[calc(var(--reader-font-size))]">
-            {line || <br />}
+            &emsp;&emsp;{para.trim()}
           </p>
         ))}
       </div>
@@ -201,7 +201,7 @@ export const ReaderCore: React.FC<ReaderCoreProps> = ({
         className={`
           py-8 mx-auto
           font-serif text-[var(--reader-text)]
-          ${isPagination ? 'h-[calc(100vh-80px)] overflow-hidden' : 'min-h-[calc(100vh-80px)]'}
+          ${isPagination ? 'h-[calc(100vh-160px)] overflow-hidden' : 'min-h-[calc(100vh-160px)]'}
         `}
         style={{
           paddingLeft: actualMargin,

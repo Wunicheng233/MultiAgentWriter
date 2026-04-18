@@ -2,18 +2,19 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReaderStore } from '../stores/readerStore';
 import { Button } from '../../../components/Button';
-import type { Project } from '../../../types/api';
+import type { Project, Chapter } from '../../../types/api';
 
 interface TableOfContentsProps {
   project: Project;
   projectId: number;
+  chapters: Chapter[];
 }
 
-export const TableOfContents: React.FC<TableOfContentsProps> = ({ project, projectId }) => {
+export const TableOfContents: React.FC<TableOfContentsProps> = ({ project, projectId, chapters }) => {
   const navigate = useNavigate();
-  const isVisible = useReaderStore((state) => state.isTocVisible);
-  const setTocVisible = useReaderStore((state) => state.setTocVisible);
-  const setCurrentChapter = useReaderStore((state) => state.setCurrentChapter);
+  const isVisible = useReaderStore(state => state.isTocVisible);
+  const setTocVisible = useReaderStore(state => state.setTocVisible);
+  const setCurrentChapter = useReaderStore(state => state.setCurrentChapter);
 
   if (!isVisible) return null;
 
@@ -29,7 +30,6 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({ project, proje
     setTocVisible(false);
   };
 
-  const chapters = project.chapters || [];
   const currentChapterIndex = parseInt(
     window.location.pathname.split('/').pop() || '1'
   );

@@ -43,7 +43,10 @@ export const QualityDashboard: React.FC = () => {
     setting: '设定',
   }
 
-  const radarIndicator = Object.entries(analytics.dimension_average_scores).map(([key, value]) => ({
+  const dimScores = analytics.dimension_average_scores || {}
+  const hasDimensions = Object.keys(dimScores).length > 0
+
+  const radarIndicator = Object.entries(dimScores).map(([key, value]) => ({
     name: dimensionMapping[key] || key,
     max: 10,
     value: value,
@@ -53,7 +56,7 @@ export const QualityDashboard: React.FC = () => {
     tooltip: {
       trigger: 'item',
     },
-    radar: {
+    radar: hasDimensions ? {
       indicator: radarIndicator,
       radius: '60%',
       axisName: {
@@ -65,6 +68,9 @@ export const QualityDashboard: React.FC = () => {
           color: ['#faf7f2', '#f0ebe4'],
         },
       },
+    } : {
+      indicator: [],
+      radius: '60%',
     },
     series: [
       {
@@ -206,9 +212,15 @@ export const QualityDashboard: React.FC = () => {
 
         <Card>
           <h2 className="text-xl mb-4">多维度评分雷达图</h2>
-          <div className="h-[300px]">
-            <ReactECharts option={radarOption} style={{ height: '100%', width: '100%' }} />
-          </div>
+          {hasDimensions ? (
+            <div className="h-[300px]">
+              <ReactECharts option={radarOption} style={{ height: '100%', width: '100%' }} />
+            </div>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-secondary">
+              <p>多维度评分数据生成后会显示在此处</p>
+            </div>
+          )}
         </Card>
       </div>
 

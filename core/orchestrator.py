@@ -69,6 +69,8 @@ class NovelOrchestrator:
 
         self.progress_callback = progress_callback
         self.project_dir = project_dir
+        # 默认字数，防止提前访问导致AttributeError
+        self.chapter_word_count = "2000"
 
         # 创建 OpenAI 客户端，使用用户 API Key（如果提供了）
         api_key = user_api_key or settings.get_api_key_for_agent("default")
@@ -103,6 +105,14 @@ class NovelOrchestrator:
         self.start_chapter: int = 1
         self.end_chapter: int = 1
         self.chapter_scores: List[Dict] = []
+        # 维度评分累积，用于质量分析雷达图
+        self.dimension_scores = {
+            "plot": [],
+            "character": [],
+            "hook": [],
+            "writing": [],
+            "setting": [],
+        }
         self.info_path: Optional[Path] = None
         self.content_type: str = "novel"
 
@@ -299,25 +309,43 @@ class NovelOrchestrator:
 
                 # 如果项目目录已存在设定圣经，读取它
                 setting_bible_path = self.output_dir / "setting_bible.md"
-                if setting_bible_path.exists():
+                plan_file = self.output_dir / "novel_plan.md"
+                if setting_bible_path.exists() and plan_file.exists():
                     with open(setting_bible_path, "r", encoding="utf-8") as f:
                         world_bible = f.read().strip()
-                    logger.info(f"✅ 已加载项目中已存在的设定圣经")
+                    with open(plan_file, "r", encoding="utf-8") as f:
+                        plan_content = f.read().strip()
+                    self.plan = plan_content
+                    self.setting_bible = world_bible
+                    logger.info(f"✅ 已加载项目中已存在的设定圣经和策划方案")
+
+                    # 检查是否有策划方案的用户反馈（来自上一次确认不通过）
+                    feedback_plan_path = self.output_dir / "feedback_plan.txt"
+                    if feedback_plan_path.exists():
+                        with open(feedback_plan_path, "r", encoding="utf-8") as f:
+                            feedback = f.read().strip()
+                        if feedback:
+                            logger.info(f"找到策划方案用户反馈，根据反馈重新优化...")
+                            self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
+                            self.setting_bible = self.plan
+                            # 删除反馈文件，避免下次重复使用
+                            feedback_plan_path.unlink()
+                            logger.info("已根据用户反馈重新优化策划方案")
                 else:
                     world_bible = ""
 
-                # 从req读取其他参数
-                genre = self.req.get("genre", "")
-                total_words = self.req.get("total_words", "")
-                core_hook = self.req.get("core_hook", "")
+                    # 从req读取其他参数
+                    genre = self.req.get("genre", "")
+                    total_words = self.req.get("total_words", "")
+                    core_hook = self.req.get("core_hook", "")
 
-                self.plan = self.planner.generate_plan(
-                    core_requirement, target_platform, self.chapter_word_count, self.content_type,
-                    world_bible=world_bible, genre=genre, total_words=str(total_words), core_hook=core_hook
-                )
-                # 在精简架构中，Planner直接输出完整的设定圣经+分章大纲
-                self.setting_bible = self.plan
-                logger.info("Planner方案生成完成")
+                    self.plan = self.planner.generate_plan(
+                        core_requirement, target_platform, self.chapter_word_count, self.content_type,
+                        world_bible=world_bible, genre=genre, total_words=str(total_words), core_hook=core_hook
+                    )
+                    # 在精简架构中，Planner直接输出完整的设定圣经+分章大纲
+                    self.setting_bible = self.plan
+                    logger.info("Planner方案生成完成")
 
             # 保存小说基础信息
             with open(self.info_path, "w", encoding="utf-8") as f:
@@ -330,7 +358,13 @@ class NovelOrchestrator:
                 }, f, ensure_ascii=False, indent=2)
 
             # 人工确认流程
-            if not self.skip_confirm and not use_user_plan:
+            # 只有当这是首次生成（策划文件不存在）或者刚刚修改了策划（有反馈待确认）才需要等待确认
+            # 如果策划文件已经存在，说明已经确认过了，直接继续
+            plan_file = self.output_dir / "novel_plan.md"
+            setting_file = self.output_dir / "setting_bible.md"
+            need_confirmation = not (plan_file.exists() and setting_file.exists())
+
+            if not self.skip_confirm and not use_user_plan and need_confirmation:
                 if confirmation_handler:
                     # 使用外部确认处理（Web界面会提供）
                     confirmed = False
@@ -340,34 +374,36 @@ class NovelOrchestrator:
                             self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
                             self.setting_bible = self.plan
                 else:
-                    try:
-                        import sys
-                        if sys.stdin.isatty():
-                            # CLI交互式确认
+                    import sys
+                    if sys.stdin.isatty():
+                        # CLI交互式确认
+                        print("\n" + "="*80)
+                        print("📝 Planner输出预览（设定圣经+大纲）：")
+                        print("="*80)
+                        preview = self.plan[:1000] + ("..." if len(self.plan) > 1000 else "")
+                        print(preview)
+                        print("="*80)
+                        confirm = input("\n请确认方案是否通过？（y/n）：\n").lower()
+                        while confirm != "y":
+                            feedback = input("请输入修改意见：\n")
+                            self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
+                            self.setting_bible = self.plan
                             print("\n" + "="*80)
-                            print("📝 Planner输出预览（设定圣经+大纲）：")
+                            print("📝 修改后的方案预览：")
                             print("="*80)
                             preview = self.plan[:1000] + ("..." if len(self.plan) > 1000 else "")
                             print(preview)
                             print("="*80)
                             confirm = input("\n请确认方案是否通过？（y/n）：\n").lower()
-                            while confirm != "y":
-                                feedback = input("请输入修改意见：\n")
-                                self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
-                                self.setting_bible = self.plan
-                                print("\n" + "="*80)
-                                print("📝 修改后的方案预览：")
-                                print("="*80)
-                                preview = self.plan[:1000] + ("..." if len(self.plan) > 1000 else "")
-                                print(preview)
-                                print("="*80)
-                                confirm = input("\n请确认方案是否通过？（y/n）：\n").lower()
-                        else:
-                            # 非交互式环境，默认通过
-                            logger.info("非交互式运行，策划方案自动通过")
-                    except (EOFError, IOError):
-                        # 非交互式环境，默认通过
-                        logger.info("非交互式运行，策划方案自动通过")
+                    else:
+                        # 非交互式环境（Web/Celery），需要等待用户确认
+                        # 先保存当前方案，然后抛出异常让上层处理
+                        logger.info("非交互式运行，策划方案已生成，等待用户确认...")
+                        with open(self.output_dir / "novel_plan.md", "w", encoding="utf-8") as f:
+                            f.write(self.plan)
+                        with open(self.output_dir / "setting_bible.md", "w", encoding="utf-8") as f:
+                            f.write(self.setting_bible)
+                        raise WaitingForConfirmationError(0, self.plan[:2000])
 
         else:
             # 续写：加载已有策划方案和设定圣经
@@ -508,12 +544,88 @@ class NovelOrchestrator:
 
         # Step 3: Critic 评审
         chapter_outline = self.get_chapter_outline(chapter_index)
-        passed, score, issues = self.critic.critic_chapter(
+        passed, score, dimensions, issues = self.critic.critic_chapter(
             current_content,
             self.setting_bible,
             chapter_outline,
             content_type,
         )
+
+        # 保存本章维度评分
+        if not hasattr(self, 'dimension_scores'):
+            self.dimension_scores = {
+                "plot": [],
+                "character": [],
+                "hook": [],
+                "writing": [],
+                "setting": [],
+            }
+        for dim, score_val in dimensions.items():
+            if dim in self.dimension_scores:
+                self.dimension_scores[dim].append(score_val)
+
+        # 将系统防护发现的问题添加到issues列表，让Revise一起修复
+        # 这样系统防护检查出来的问题不会只停留在日志，会真正被修复
+        word_count = guardrail_result.metrics.get('word_count', 0)
+        target_wc = guardrail_context['target_word_count']
+        if word_count > 0:
+            deviation = abs(word_count - target_wc) / target_wc
+            # 如果字数偏离超过30%，强制加入修订清单
+            if deviation > 0.30:
+                if word_count < target_wc:
+                    issues.append({
+                        "type": "字数不足",
+                        "location": "全文",
+                        "fix": f"本章实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节：增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。"
+                    })
+                    passed = False
+                    logger.warning(f"字数不足偏差超过30%，加入修订清单")
+                else:
+                    issues.append({
+                        "type": "字数超标",
+                        "location": "全文",
+                        "fix": f"本章实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。"
+                    })
+                    passed = False
+                    logger.warning(f"字数超标偏差超过30%，加入修订清单")
+
+        # 添加其他系统防护发现的问题到修订清单
+        if "G-05" in guardrail_result.violations:
+            issues.append({
+                "type": "格式问题",
+                "location": "全文",
+                "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。"
+            })
+            passed = False
+
+        if "G-09" in guardrail_result.violations:
+            cliches = guardrail_result.violations["G-09"]
+            issues.append({
+                "type": "文风问题",
+                "location": "全文",
+                "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。"
+            })
+            passed = False
+
+        # 主角未出场也要加入修订
+        has_protagonist_issue = any(sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg)
+        if has_protagonist_issue:
+            issues.append({
+                "type": "剧情问题",
+                "location": "本章",
+                "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。"
+            })
+            passed = False
+
+        # 结尾缺少钩子也要加入修订
+        has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
+        if has_hook_issue:
+            issues.append({
+                "type": "结构问题",
+                "location": "本章结尾",
+                "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。"
+            })
+            passed = False
 
         revise_count = 0
         max_revise_loops = self.MAX_REVISE_LOOPS
@@ -537,13 +649,78 @@ class NovelOrchestrator:
             guardrail_result = run_system_guardrails(current_content, guardrail_context)
             current_content = guardrail_result.corrected_content
 
+            # 再次检查字数偏差，如果还是超标，加入问题清单
+            word_count = guardrail_result.metrics.get('word_count', 0)
+            target_wc = guardrail_context['target_word_count']
+            if word_count > 0:
+                deviation = abs(word_count - target_wc) / target_wc
+                if deviation > 0.30:
+                    if word_count < target_wc:
+                        issues.append({
+                            "type": "字数不足",
+                            "location": "全文",
+                            "fix": f"本章修订后实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节：增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。",
+                        })
+                        passed = False
+                        logger.warning(f"字数不足偏差超过30%，加入修订清单");
+                    else:
+                        issues.append({
+                            "type": "字数超标",
+                            "location": "全文",
+                            "fix": f"本章修订后实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。",
+                        })
+                        passed = False
+                        logger.warning(f"字数超标偏差超过30%，加入修订清单");
+
+            # 添加其他系统防护发现的问题到修订清单
+            if "G-05" in guardrail_result.violations:
+                issues.append({
+                    "type": "格式问题",
+                    "location": "全文",
+                    "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。",
+                })
+                passed = False
+
+            if "G-09" in guardrail_result.violations:
+                cliches = guardrail_result.violations["G-09"]
+                issues.append({
+                    "type": "文风问题",
+                    "location": "全文",
+                    "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。",
+                })
+                passed = False
+
+            # 主角未出场也要加入修订
+            has_protagonist_issue = any(sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg)
+            if has_protagonist_issue:
+                issues.append({
+                    "type": "剧情问题",
+                    "location": "本章",
+                    "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。",
+                })
+                passed = False
+
+            # 结尾缺少钩子也要加入修订
+            has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
+            if has_hook_issue:
+                issues.append({
+                    "type": "结构问题",
+                    "location": "本章结尾",
+                    "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。",
+                })
+                passed = False
+
             # Step 5: Critic 复评
-            passed, score, issues = self.critic.critic_chapter(
+            passed, score, dimensions, issues = self.critic.critic_chapter(
                 current_content,
                 self.setting_bible,
                 chapter_outline,
                 content_type,
             )
+            # 更新维度评分
+            for dim, score_val in dimensions.items():
+                if dim in self.dimension_scores:
+                    self.dimension_scores[dim].append(score_val)
 
         if not passed:
             logger.warning(
@@ -558,56 +735,57 @@ class NovelOrchestrator:
 
         # 章节级人工确认（如果不跳过）
         if not self.skip_chapter_confirm:
-            try:
-                import sys
-                if sys.stdin.isatty():
+            import sys
+            if sys.stdin.isatty():
+                # CLI交互式确认
+                print("\n" + "="*80)
+                print(f"📖 第{chapter_index}章生成完成，请审阅：")
+                print("="*80)
+                preview = current_content[:1000] + ("..." if len(current_content) > 1000 else "")
+                print(preview)
+                print("="*80)
+                confirm = input("\n请确认是否通过？（y/n）：\n").lower()
+                while confirm != "y":
+                    feedback = input("请输入修改意见：\n")
+                    # 根据用户意见重新修订
+                    # 将用户反馈转为issues格式
+                    user_issue = [{
+                        "type": "用户反馈",
+                        "location": "全文",
+                        "fix": feedback
+                    }]
+                    current_content = self.revise.revise_chapter(
+                        current_content,
+                        user_issue,
+                        self.setting_bible
+                    )
+                    # 再次评审
+                    passed, score, dimensions, issues = self.critic.critic_chapter(
+                        current_content,
+                        self.setting_bible,
+                        chapter_outline,
+                        content_type,
+                    )
+                    # 更新维度评分
+                    for dim, score_val in dimensions.items():
+                        if dim in self.dimension_scores:
+                            self.dimension_scores[dim].append(score_val)
                     print("\n" + "="*80)
-                    print(f"📖 第{chapter_index}章生成完成，请审阅：")
+                    print(f"📖 修改后的第{chapter_index}章预览：")
                     print("="*80)
                     preview = current_content[:1000] + ("..." if len(current_content) > 1000 else "")
                     print(preview)
                     print("="*80)
                     confirm = input("\n请确认是否通过？（y/n）：\n").lower()
-                    while confirm != "y":
-                        feedback = input("请输入修改意见：\n")
-                        # 根据用户意见重新修订
-                        # 将用户反馈转为issues格式
-                        user_issue = [{
-                            "type": "用户反馈",
-                            "location": "全文",
-                            "fix": feedback
-                        }]
-                        current_content = self.revise.revise_chapter(
-                            current_content,
-                            user_issue,
-                            self.setting_bible
-                        )
-                        # 再次评审
-                        passed, score, issues = self.critic.critic_chapter(
-                            current_content,
-                            self.setting_bible,
-                            chapter_outline,
-                            content_type,
-                        )
-                        print("\n" + "="*80)
-                        print(f"📖 修改后的第{chapter_index}章预览：")
-                        print("="*80)
-                        preview = current_content[:1000] + ("..." if len(current_content) > 1000 else "")
-                        print(preview)
-                        print("="*80)
-                        confirm = input("\n请确认是否通过？（y/n）：\n").lower()
-            except (EOFError, IOError):
+            else:
                 # 非交互式环境（Celery/Web），需要人工确认
                 # 抛出特殊异常让上层处理，任务暂停等待用户反馈
-                if not self.skip_chapter_confirm:
-                    logger.info(f"非交互式运行，第{chapter_index}章生成完成，等待用户确认...")
-                    # 将当前已编辑好的内容先保存下来供前端预览
-                    self.save_chapter(chapter_index, current_content)
-                    add_chapter_to_db(chapter_index, f"第{chapter_index}章", current_content)
-                    # 抛异常告诉上层需要等待确认
-                    raise WaitingForConfirmationError(chapter_index, current_content)
-                # 否则自动通过
-                logger.info("非交互式运行，自动确认章节通过")
+                logger.info(f"非交互式运行，第{chapter_index}章生成完成，等待用户确认...")
+                # 将当前已编辑好的内容先保存下来供前端预览
+                self.save_chapter(chapter_index, current_content)
+                add_chapter_to_db(chapter_index, f"第{chapter_index}章", current_content)
+                # 抛异常告诉上层需要等待确认
+                raise WaitingForConfirmationError(chapter_index, current_content)
 
         # 保存终稿到 chapters 子目录
         self.save_chapter(chapter_index, current_content)
@@ -725,20 +903,42 @@ class NovelOrchestrator:
                     }
                     guardrail_result = run_system_guardrails(current_content, guardrail_context)
                     current_content = guardrail_result.corrected_content
-                    passed, score, issues = self.critic.critic_chapter(
+                    passed, score, dimensions, issues = self.critic.critic_chapter(
                         current_content,
                         self.setting_bible,
                         outline["outline"],
                         self.content_type,
                     )
+                    # 更新维度评分
+                    for dim, score_val in dimensions.items():
+                        if dim in self.dimension_scores:
+                            self.dimension_scores[dim].append(score_val)
                     # 删除反馈文件
                     feedback_file.unlink()
                     # 后续流程继续
                 else:
                     # 正常生成新章节
-                    current_content, score, passed, issues = self.run_chapter_generation(chapter_num, prev_chapter_end)
+                    # 即使生成失败或合规检查不通过，也不轻易跳过，保留已有内容供用户检查
+                    try:
+                        current_content, score, passed, issues = self.run_chapter_generation(chapter_num, prev_chapter_end)
+                    except Exception as e:
+                        logger.error(f"第 {chapter_num} 章生成过程发生异常: {e}，尝试保存已有内容继续")
+                        # 如果生成失败但已有部分内容，仍然继续处理
+                        if 'current_content' not in locals():
+                            # 完全失败，创建一个占位章节说明错误
+                            current_content = f"第{chapter_num}章\n\n生成失败: {str(e)}\n请尝试重新生成此章节"
+                            score = 0
+                            passed = False
+                            issues = [{"type": "生成错误", "location": "全文", "fix": str(e)}]
+
+                    # 即使内容为空，也创建一个占位符，不直接跳过
+                    # 用户要求：即使没通过检验也要保存章节，不要轻易跳过
                     if not current_content:
-                        continue
+                        logger.warning(f"第 {chapter_num} 章生成结果为空，但仍保存占位章节不跳过（风控误判概率较高）")
+                        current_content = f"第{chapter_num}章\n\n生成结果为空，可能触发了风控拦截。请尝试重新生成此章节"
+                        score = 0
+                        passed = False
+                        issues = [{"type": "合规拦截", "location": "全文", "fix": "生成结果为空，可能触发了内容安全风控"}]
 
                 # 记录评分
                 self.chapter_scores.append({
@@ -796,8 +996,15 @@ class NovelOrchestrator:
                     overall_score = sum(cs["score"] for cs in self.chapter_scores) / len(self.chapter_scores)
                 else:
                     overall_score = 0
+                # 计算各维度平均分
+                dimension_averages = {}
+                if hasattr(self, 'dimension_scores'):
+                    for dim, scores in self.dimension_scores.items():
+                        if scores:
+                            dimension_averages[dim] = round(sum(scores) / len(scores), 2)
                 info["chapter_scores"] = self.chapter_scores
                 info["overall_quality_score"] = round(overall_score, 2)
+                info["dimension_average_scores"] = dimension_averages
                 info["architecture"] = "slim-v2"
                 # 保存回info.json
                 with open(self.info_path, "w", encoding="utf-8") as f:

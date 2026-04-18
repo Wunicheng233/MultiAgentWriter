@@ -156,8 +156,10 @@ export const ProjectOverview: React.FC = () => {
 
   const handleTriggerGenerate = async () => {
     try {
-      await triggerGenerate(projectId)
-      showToast('生成任务已提交', 'success')
+      // 如果项目已经不是草稿状态（已有生成内容），则自动开启重新生成模式
+      const isRegenerate = data.status !== 'draft'
+      await triggerGenerate(projectId, isRegenerate)
+      showToast(isRegenerate ? '重新生成任务已提交，已有章节已清空' : '生成任务已提交', 'success')
       refetch()
     } catch (e: any) {
       showToast(e.response?.data?.detail || '提交失败', 'error')

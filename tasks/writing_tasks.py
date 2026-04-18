@@ -211,6 +211,31 @@ def generate_novel_task(
                                 db.add(chapter)
                                 logger.info(f"Incremental sync: added new chapter {chapter_index} to database")
                             db.commit()
+
+                            # 增量同步质量评分：从info.json读取当前章节的评分并更新
+                            # 这样即使开启人机交互逐章确认，每章生成完成后评分也能及时保存
+                            try:
+                                info_path = project_dir / "info.json"
+                                if info_path.exists():
+                                    with open(info_path, "r", encoding="utf-8") as f:
+                                        info = json.load(f)
+                                    # 更新项目总体评分
+                                    project.overall_quality_score = info.get("overall_quality_score", 0)
+                                    project.dimension_average_scores = info.get("dimension_average_scores", {})
+                                    # 更新当前章节的quality_score
+                                    if "chapter_scores" in info:
+                                        for cs in info["chapter_scores"]:
+                                            if cs["chapter"] == chapter_index:
+                                                chapter_db = db.query(Chapter).filter(
+                                                    Chapter.project_id == project.id,
+                                                    Chapter.chapter_index == chapter_index
+                                                ).first()
+                                                if chapter_db:
+                                                    chapter_db.quality_score = cs["score"]
+                                    db.commit()
+                                    logger.info(f"Incremental sync: updated quality scores for chapter {chapter_index}")
+                            except Exception as e:
+                                logger.warning(f"Failed to incremental sync quality scores: {e}")
             except Exception as e:
                 logger.warning(f"Failed to incremental sync chapter to database: {e}")
 
@@ -373,6 +398,7 @@ def generate_novel_task(
                 task_record.current_step = f"第{e.chapter_index}章生成完成，等待你审阅确认"
                 task_record.current_chapter = e.chapter_index
                 db.commit()
+                logger.info(f"Updated task {task_record.id} status to waiting_confirm in database")
             # 任务正常结束，等待用户确认后重启继续下一章
             return {
                 "success": True,

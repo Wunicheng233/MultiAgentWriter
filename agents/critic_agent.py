@@ -22,9 +22,9 @@ def critic_chapter(
     chapter_outline: str,
     content_type: str = "novel",
     client: openai.OpenAI = None
-) -> Tuple[bool, int, List[Dict]]:
+) -> Tuple[bool, int, Dict[str, int], List[Dict]]:
     """
-    评审章节，输出 JSON 格式的结果。
+    评审章节，输出 JSON 格式的评审结果。
 
     Args:
         chapter_content: 待评审的章节正文
@@ -34,7 +34,7 @@ def critic_chapter(
         client: OpenAI客户端
 
     Returns:
-        (passed: 是否通过, score: 分数 1-10, issues: 问题列表)
+        (passed: 是否通过, score: 总分 1-10, dimensions: 各维度评分, issues: 问题列表)
         issues 列表中每个item包含: {type, location, fix}
     """
     # 读取 prompt 模板
@@ -65,7 +65,7 @@ def critic_chapter(
     if data is None:
         # 解析失败，默认不通过
         logger.error(f"❌ Critic 输出JSON解析失败，输出内容: {result[:200]}...")
-        return False, 5, [{
+        return False, 5, {}, [{
             "type": "格式问题",
             "location": "全文",
             "fix": "重新生成，确保输出严格符合JSON格式"
@@ -73,17 +73,32 @@ def critic_chapter(
 
     passed = data.get("passed", False)
     score = data.get("score", 5)
+    dimensions = data.get("dimensions", {})
     issues = data.get("issues", [])
 
     # 确保score在1-10范围
     score = max(1, min(10, score))
+
+    # 确保每个维度都有值，默认5分
+    default_dimensions = {
+        "plot": 5,
+        "character": 5,
+        "hook": 5,
+        "writing": 5,
+        "setting": 5,
+    }
+    for k in default_dimensions:
+        if k not in dimensions:
+            dimensions[k] = default_dimensions[k]
+        else:
+            dimensions[k] = max(1, min(10, dimensions[k]))
 
     logger.info(f"📊 评审完成，分数: {score}/10，通过: {passed}，问题数: {len(issues)}")
     if not passed and issues:
         for i, issue in enumerate(issues[:3]):
             logger.info(f"   {i+1}. [{issue.get('type')}] {issue.get('location')} → {issue.get('fix')[:50]}")
 
-    return passed, score, issues
+    return passed, score, dimensions, issues
 
 
 def parse_json_result(result: str) -> Optional[Dict]:

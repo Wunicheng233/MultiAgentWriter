@@ -211,9 +211,59 @@ def list_chapters(
     return chapters
 
 
+@router.get("/{project_id}/plan-preview", summary="获取策划方案预览")
+def get_plan_preview(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """获取策划方案预览（前 2000 字）"""
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
+
+    if not project.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="项目文件路径不存在"
+        )
+
+    # 读取 novel_plan.md 或者 setting_bible.md
+    project_path = Path(project.file_path)
+    plan_path = project_path / "novel_plan.md"
+    setting_path = project_path / "setting_bible.md"
+
+    content = ""
+    if plan_path.exists():
+        with open(plan_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    elif setting_path.exists():
+        with open(setting_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="策划方案文件不存在，请先生成策划方案"
+        )
+
+    # 返回前 3000 字符作为预览
+    preview = content[:3000]
+    if len(content) > 3000:
+        preview += "\n\n...（内容已截断，完整内容保存到项目文件）"
+
+    return {
+        "preview": preview,
+        "full_length": len(content),
+    }
+
+
 @router.post("/{project_id}/generate", response_model=GenerationTaskResponse, summary="触发生成任务")
 def trigger_generation(
     project_id: int,
+    regenerate: bool = Query(False, description="重新生成：清空所有已有章节文件后再开始"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -246,6 +296,34 @@ def trigger_generation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"已有运行中的任务 (task_id={running_task.celery_task_id})，请等待完成"
         )
+
+    # 如果是重新生成，清空所有已生成的章节文件和数据库记录
+    if regenerate:
+        # 删除数据库中的章节记录
+        db.query(Chapter).filter(Chapter.project_id == project_id).delete()
+        # 删除文件系统中的章节文件
+        if project.file_path:
+            try:
+                project_dir = Path(project.file_path)
+                chapters_dir = project_dir / "chapters"
+                if chapters_dir.exists():
+                    for f in chapters_dir.glob("chapter_*.txt"):
+                        f.unlink()
+                    for f in chapters_dir.glob("feedback_*.txt"):
+                        f.unlink()
+                # 删除根目录的残留文件
+                for f in project_dir.glob("chapter_*.txt"):
+                    f.unlink()
+                for f in project_dir.glob("feedback_*.txt"):
+                    f.unlink()
+                # 删除评分信息
+                info_file = project_dir / "info.json"
+                if info_file.exists():
+                    info_file.unlink()
+                logger.info(f"Regenerate: cleared all existing chapters for project {project_id}")
+            except Exception as e:
+                logger.warning(f"Failed to clear existing chapters for regenerate: {e}")
+        db.commit()
 
     # 提交Celery任务
     project_dir = project.file_path
@@ -768,15 +846,26 @@ def reset_project(
         try:
             project_dir = Path(project.file_path)
             if project_dir.exists():
-                # 删除所有 chapter_*.txt, feedback_*.txt
+                # 删除根目录的 chapter_*.txt, feedback_*.txt (兼容旧格式)
                 for f in project_dir.glob("chapter_*.txt"):
                     f.unlink()
                 for f in project_dir.glob("feedback_*.txt"):
                     f.unlink()
+                # 删除 chapters/ 子目录中的章节文件
+                chapters_dir = project_dir / "chapters"
+                if chapters_dir.exists():
+                    for f in chapters_dir.glob("chapter_*.txt"):
+                        f.unlink()
+                    for f in chapters_dir.glob("feedback_*.txt"):
+                        f.unlink()
                 # 删除 bible.json 如果存在
                 bible_file = project_dir / "bible.json"
                 if bible_file.exists():
                     bible_file.unlink()
+                # 删除 info.json 中的分数信息
+                info_file = project_dir / "info.json"
+                if info_file.exists():
+                    info_file.unlink()
         except Exception as e:
             logger.warning(f"Failed to clean project directory: {e}")
 

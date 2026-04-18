@@ -20,7 +20,7 @@ from config import ROOT_DIR
 DEFAULT_CONFIG = {
     "guardrails": {
         "word_count": {
-            "tolerance": 0.30
+            "tolerance": 0.20
         },
         "paragraph": {
             "max_sentences": 3,

@@ -76,8 +76,8 @@ export async function deleteProject(projectId: number): Promise<{ status: string
   return res.data
 }
 
-export async function triggerGenerate(projectId: number): Promise<GenerationTask> {
-  const res = await api.post<GenerationTask>(`/projects/${projectId}/generate`)
+export async function triggerGenerate(projectId: number, regenerate: boolean = false): Promise<GenerationTask> {
+  const res = await api.post<GenerationTask>(`/projects/${projectId}/generate?regenerate=${regenerate}`)
   return res.data
 }
 
