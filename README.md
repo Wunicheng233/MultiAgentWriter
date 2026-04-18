@@ -123,28 +123,20 @@ alembic upgrade head
 
 ### 5. 启动所有服务
 
-**需要打开 3 个终端，都激活 conda 环境：**
+**❗ 重要：需要同时打开 3 个终端窗口，都激活你的 Python 虚拟环境：**
 
-#### 终端 1 - 启动 FastAPI 后端：
-```bash
-conda activate novel_agent
-cd /path/to/writer
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
+| 终端 | 作用 | 启动命令 |
+|------|------|----------|
+| **终端 1** | FastAPI 后端服务（处理HTTP请求） | ```bash\nconda activate novel_agent\ncd /path/to/writer\nuvicorn backend.main:app --reload --host 0.0.0.0 --port 8000\n``` |
+| **终端 2** | Celery Worker（异步处理AI生成任务） | ```bash\nconda activate novel_agent\ncd /path/to/writer\ncelery -A celery_app worker --loglevel=info\n``` |
+| **终端 3** | Vite 前端开发服务器 | ```bash\nconda activate novel_agent\ncd /path/to/writer/frontend\nnpm run dev\n``` |
 
-#### 终端 2 - 启动 Celery Worker（处理异步任务）：
-```bash
-conda activate novel_agent
-cd /path/to/writer
-celery -A celery_app worker --loglevel=info
-```
+**为什么需要 3 个终端？**
+- FastAPI 负责处理网页 API 请求
+- Celery Worker 负责在后台运行耗时的AI生成任务，不会阻塞网页响应
+- Vite 提供前端热重载开发服务
 
-#### 终端 3 - 启动前端开发服务器：
-```bash
-conda activate novel_agent
-cd /path/to/writer/frontend
-npm run dev
-```
+三者都必须运行，系统才能正常工作！
 
 ### 6. 使用系统
 
@@ -224,10 +216,13 @@ npm run dev
 - 协作者有只读权限，可以查看项目和章节
 - 随时可以移除协作者
 
-### 6. 人机交互确认模式
+### 6. 人机交互确认模式（开发中）
+
+> ⚠️ **当前状态**: 功能正在完善中，可能存在交互问题。稳定使用建议勾选"跳过策划确认"和"跳过章节确认"开启全自动模式。
+
 开启方式：创建项目时关闭"跳过策划确认"和"跳过章节确认"
 
-工作流程：
+计划工作流程：
 1. AI 生成完策划方案 → 弹出确认对话框 → 你预览 → 确认通过 / 修改后重新生成
 2. AI 生成完每一章 → 弹出确认对话框 → 你预览 → 确认通过 / 修改后重新优化
 3. 完全掌控创作方向，不满意可以随时调整
@@ -237,7 +232,7 @@ npm run dev
 - 初次创作，不确定方向，需要逐步调整
 - 重要作品，不想完全全自动
 
-关闭方式：创建项目时勾选"跳过策划确认"和"跳过章节确认"，系统会全自动生成所有章节。
+全自动模式（推荐稳定使用）：创建项目时勾选"跳过策划确认"和"跳过章节确认"，系统会全自动生成所有章节。
 
 ---
 
