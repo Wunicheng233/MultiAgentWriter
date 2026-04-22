@@ -858,23 +858,7 @@ class NovelOrchestrator:
                 percent = 20 + int((done_chapters / total_chapters_count) * 70)
                 self._report_progress(percent, f"正在生成第 {chapter_num} 章...")
 
-                # ========== 断点续跑：检查章节是否已生成，跳过已完成 ==========
                 chapter_file = self.output_dir / "chapters" / f"chapter_{chapter_num}.txt"
-                if chapter_file.exists():
-                    # 文件已存在，说明章节已经生成，跳过
-                    # 读取已生成内容，更新 prev_chapter_end 用于下一章衔接
-                    with open(chapter_file, "r", encoding="utf-8") as f:
-                        existing_content = f.read()
-                    prev_chapter_end = existing_content[-500:] if len(existing_content) > 500 else existing_content
-                    logger.info(f"第{chapter_num}章已生成文件存在，跳过（断点续跑）")
-                    # 统计真实汉字数量（只统计中文字符，不含标点空格）
-                    import re
-                    chinese_chars = re.findall(r'[\u4e00-\u9fff]', existing_content)
-                    words = len(chinese_chars)
-                    generated.append({"num": chapter_num, "words": words})
-                    continue
-
-                # 检查是否有用户反馈需要重新优化（Web人机交互模式）
                 feedback_file = self.output_dir / f"feedback_{chapter_num}.txt"
                 if feedback_file.exists():
                     # 读取用户反馈
@@ -913,9 +897,25 @@ class NovelOrchestrator:
                     for dim, score_val in dimensions.items():
                         if dim in self.dimension_scores:
                             self.dimension_scores[dim].append(score_val)
+                    # 将修订后的内容写回统一章节目录，确保后续续写与前端读取一致
+                    self.save_chapter(chapter_num, current_content)
                     # 删除反馈文件
                     feedback_file.unlink()
                     # 后续流程继续
+                # ========== 断点续跑：没有待处理反馈时，跳过已完成章节 ==========
+                elif chapter_file.exists():
+                    # 文件已存在，说明章节已经生成，跳过
+                    # 读取已生成内容，更新 prev_chapter_end 用于下一章衔接
+                    with open(chapter_file, "r", encoding="utf-8") as f:
+                        existing_content = f.read()
+                    prev_chapter_end = existing_content[-500:] if len(existing_content) > 500 else existing_content
+                    logger.info(f"第{chapter_num}章已生成文件存在，跳过（断点续跑）")
+                    # 统计真实汉字数量（只统计中文字符，不含标点空格）
+                    import re
+                    chinese_chars = re.findall(r'[\u4e00-\u9fff]', existing_content)
+                    words = len(chinese_chars)
+                    generated.append({"num": chapter_num, "words": words})
+                    continue
                 else:
                     # 正常生成新章节
                     # 即使生成失败或合规检查不通过，也不轻易跳过，保留已有内容供用户检查

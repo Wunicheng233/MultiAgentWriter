@@ -28,6 +28,14 @@ except ImportError:
 router = APIRouter(prefix="/projects/{project_id}/chapters", tags=["chapters"])
 
 
+def get_project_chapter_file(project_file_path: str, chapter_index: int) -> Path:
+    """统一章节文件路径，和 orchestrator 保持一致。"""
+    project_dir = Path(project_file_path)
+    chapters_dir = project_dir / "chapters"
+    chapters_dir.mkdir(parents=True, exist_ok=True)
+    return chapters_dir / f"chapter_{chapter_index}.txt"
+
+
 @router.get("/{chapter_index}", response_model=ChapterResponse, summary="获取章节内容")
 def get_chapter(
     project_id: int,
@@ -134,7 +142,7 @@ def update_chapter(
     # 同步写回文件
     if project.file_path:
         try:
-            chapter_file = Path(project.file_path) / f"chapter_{chapter_index}.txt"
+            chapter_file = get_project_chapter_file(project.file_path, chapter_index)
             with open(chapter_file, "w", encoding="utf-8") as f:
                 f.write(chapter.content)
         except Exception as e:
@@ -372,7 +380,7 @@ def restore_version(
     # 同步写回文件
     if project.file_path:
         try:
-            chapter_file = Path(project.file_path) / f"chapter_{chapter_index}.txt"
+            chapter_file = get_project_chapter_file(project.file_path, chapter_index)
             with open(chapter_file, "w", encoding="utf-8") as f:
                 f.write(chapter.content)
         except Exception as e:

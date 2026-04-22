@@ -18,6 +18,7 @@ from celery_app import celery_app
 from core.orchestrator import NovelOrchestrator, WaitingForConfirmationError
 from backend.database import SessionLocal
 from backend.models import GenerationTask, Project, User, Chapter
+from backend.workflow_service import update_workflow_run_status
 
 logger = get_task_logger(__name__)
 
@@ -55,6 +56,14 @@ def generate_novel_task(
         # 如果任务已经被取消（用户重置了项目），直接退出不执行
         if task_record and task_record.status == "cancelled":
             logger.info(f"Task {self.request.id} has been cancelled, skipping execution")
+            update_workflow_run_status(
+                db=db,
+                generation_task=task_record,
+                task_status="cancelled",
+                current_step_key="cancelled",
+                metadata_updates={"cancelled_before_execution": True},
+            )
+            db.commit()
             db.close()
             return {
                 "success": False,
@@ -74,12 +83,14 @@ def generate_novel_task(
         # 计算小数进度（0-1）用于前端进度条
         progress = percent / 100.0
         current_chapter = None
+        workflow_step_key = "running"
 
         # 解析当前步骤
         if "正在生成第" in message and "章" in message:
             match = re.search(r"第\s*(\d+)\s*章", message)
             if match:
                 current_chapter = int(match.group(1))
+                workflow_step_key = "generating_chapter"
                 self.update_state(
                     state="PROGRESS",
                     meta={
@@ -91,6 +102,7 @@ def generate_novel_task(
                     }
                 )
             else:
+                workflow_step_key = "generating_chapter"
                 self.update_state(
                     state="PROGRESS",
                     meta={
@@ -101,6 +113,7 @@ def generate_novel_task(
                     }
                 )
         elif "策划" in message:
+            workflow_step_key = "planning"
             self.update_state(
                 state="PROGRESS",
                 meta={
@@ -111,6 +124,7 @@ def generate_novel_task(
                 }
             )
         elif "设定圣经" in message:
+            workflow_step_key = "generating_settings"
             self.update_state(
                 state="PROGRESS",
                 meta={
@@ -121,6 +135,7 @@ def generate_novel_task(
                 }
             )
         elif "完成" in message and "🎉" in message:
+            workflow_step_key = "completed"
             self.update_state(
                 state="PROGRESS",
                 meta={
@@ -149,6 +164,17 @@ def generate_novel_task(
                 task_record.progress = progress
                 task_record.current_step = message
                 task_record.current_chapter = current_chapter
+                update_workflow_run_status(
+                    db=db,
+                    generation_task=task_record,
+                    task_status="progress",
+                    current_step_key=workflow_step_key,
+                    current_chapter=current_chapter,
+                    metadata_updates={
+                        "last_progress": progress,
+                        "last_message": message,
+                    },
+                )
                 db.commit()
             except Exception as e:
                 logger.warning(f"Failed to update progress in database: {e}")
@@ -243,6 +269,13 @@ def generate_novel_task(
         # 更新任务状态为started
         if task_record is not None:
             task_record.status = "started"
+            update_workflow_run_status(
+                db=db,
+                generation_task=task_record,
+                task_status="started",
+                current_step_key="booting",
+                metadata_updates={"worker_task_id": self.request.id},
+            )
             db.commit()
 
         # 从数据库读取项目配置，写入项目目录的user_requirements.yaml
@@ -298,6 +331,14 @@ def generate_novel_task(
                 task_record.status = "success"
                 task_record.progress = 1.0
                 task_record.completed_at = datetime.utcnow()
+                update_workflow_run_status(
+                    db=db,
+                    generation_task=task_record,
+                    task_status="success",
+                    current_step_key="completed",
+                    current_chapter=task_record.current_chapter,
+                    metadata_updates={"completed": True},
+                )
                 # 更新项目状态为completed
                 if task_record.project_id:
                     project = db.query(Project).filter(Project.id == task_record.project_id).first()
@@ -397,6 +438,14 @@ def generate_novel_task(
                 task_record.status = "waiting_confirm"
                 task_record.current_step = f"第{e.chapter_index}章生成完成，等待你审阅确认"
                 task_record.current_chapter = e.chapter_index
+                update_workflow_run_status(
+                    db=db,
+                    generation_task=task_record,
+                    task_status="waiting_confirm",
+                    current_step_key="waiting_confirm",
+                    current_chapter=e.chapter_index,
+                    metadata_updates={"waiting_confirmation": True},
+                )
                 db.commit()
                 logger.info(f"Updated task {task_record.id} status to waiting_confirm in database")
             # 任务正常结束，等待用户确认后重启继续下一章
@@ -417,6 +466,14 @@ def generate_novel_task(
                 task_record.status = "failure"
                 task_record.error_message = str(e)
                 task_record.completed_at = datetime.utcnow()
+                update_workflow_run_status(
+                    db=db,
+                    generation_task=task_record,
+                    task_status="failure",
+                    current_step_key="failed",
+                    current_chapter=task_record.current_chapter,
+                    metadata_updates={"error_message": str(e)},
+                )
                 db.commit()
             except Exception:
                 pass

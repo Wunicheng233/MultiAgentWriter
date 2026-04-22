@@ -27,6 +27,9 @@ class User(Base):
 
     # 关系：一个用户多个项目
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    collaborations = relationship("ProjectCollaborator", back_populates="user", cascade="all, delete-orphan")
+    workflow_runs = relationship("WorkflowRun", back_populates="triggered_by_user")
+    feedback_items = relationship("FeedbackItem", back_populates="created_by_user")
 
 
 class Project(Base):
@@ -55,6 +58,11 @@ class Project(Base):
     owner = relationship("User", back_populates="projects")
     chapters = relationship("Chapter", back_populates="project", cascade="all, delete-orphan")
     generation_tasks = relationship("GenerationTask", back_populates="project", cascade="all, delete-orphan")
+    workflow_runs = relationship("WorkflowRun", back_populates="project", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
+    feedback_items = relationship("FeedbackItem", back_populates="project", cascade="all, delete-orphan")
+    share_links = relationship("ShareLink", back_populates="project", cascade="all, delete-orphan")
+    collaborators = relationship("ProjectCollaborator", back_populates="project", cascade="all, delete-orphan")
 
 
 class Chapter(Base):
@@ -77,6 +85,8 @@ class Chapter(Base):
 
     # 复合唯一索引：project_id + chapter_index 在 migrations 中创建
     project = relationship("Project", back_populates="chapters")
+    artifacts = relationship("Artifact", back_populates="chapter")
+    feedback_items = relationship("FeedbackItem", back_populates="chapter")
 
 
 class GenerationTask(Base):
@@ -95,6 +105,108 @@ class GenerationTask(Base):
     completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="generation_tasks")
+    workflow_run = relationship("WorkflowRun", back_populates="generation_task", uselist=False)
+
+
+class WorkflowRun(Base):
+    """创作工作流运行记录 - 一次生成/续写/修订任务的持久化入口"""
+    __tablename__ = "workflow_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    generation_task_id = Column(Integer, ForeignKey("generation_tasks.id", ondelete="SET NULL"), nullable=True, unique=True)
+    parent_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
+    run_kind = Column(String(30), nullable=False, default="generation")  # generation / regeneration / revision / publish
+    trigger_source = Column(String(30), nullable=False, default="manual")  # manual / feedback / system / publish
+    status = Column(String(20), nullable=False, default="pending")  # pending / running / waiting_confirm / completed / failed / cancelled
+    current_step_key = Column(String(50), nullable=True)
+    current_chapter = Column(Integer, nullable=True)
+    triggered_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    run_metadata = Column(JSON, nullable=True)
+    started_at = Column(DateTime, default=datetime.datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="workflow_runs")
+    generation_task = relationship("GenerationTask", back_populates="workflow_run")
+    parent_run = relationship("WorkflowRun", remote_side=[id], back_populates="child_runs")
+    child_runs = relationship("WorkflowRun", back_populates="parent_run")
+    triggered_by_user = relationship("User", back_populates="workflow_runs")
+    step_runs = relationship("WorkflowStepRun", back_populates="workflow_run", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="workflow_run", cascade="all, delete-orphan")
+    feedback_items = relationship("FeedbackItem", back_populates="workflow_run")
+
+
+class WorkflowStepRun(Base):
+    """工作流单步执行记录 - 用于未来的重试、回放和分析"""
+    __tablename__ = "workflow_step_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False)
+    step_key = Column(String(50), nullable=False)
+    step_type = Column(String(30), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    attempt = Column(Integer, nullable=False, default=1)
+    chapter_index = Column(Integer, nullable=True)
+    input_artifact_id = Column(Integer, ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
+    output_artifact_id = Column(Integer, ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
+    step_data = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    workflow_run = relationship("WorkflowRun", back_populates="step_runs")
+    input_artifact = relationship("Artifact", foreign_keys=[input_artifact_id], post_update=True)
+    output_artifact = relationship("Artifact", foreign_keys=[output_artifact_id], post_update=True)
+
+
+class Artifact(Base):
+    """创作工件 - 计划、设定、章节草稿、评分、快照等统一载体"""
+    __tablename__ = "artifacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
+    artifact_type = Column(String(50), nullable=False)
+    scope = Column(String(20), nullable=False, default="project")  # project / chapter / step
+    chapter_index = Column(Integer, nullable=True)
+    version_number = Column(Integer, nullable=False, default=1)
+    is_current = Column(Boolean, default=True)
+    source = Column(String(30), nullable=False, default="system")  # system / user / agent
+    content_text = Column(Text, nullable=True)
+    content_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="artifacts")
+    workflow_run = relationship("WorkflowRun", back_populates="artifacts")
+    chapter = relationship("Chapter", back_populates="artifacts")
+
+
+class FeedbackItem(Base):
+    """结构化反馈记录 - 取代单纯的 feedback_x.txt 作为长期事实源"""
+    __tablename__ = "feedback_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
+    artifact_id = Column(Integer, ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    feedback_scope = Column(String(20), nullable=False, default="chapter")  # project / plan / chapter / selection
+    feedback_type = Column(String(30), nullable=False, default="user_note")  # user_rejection / user_note / editor_note
+    action_type = Column(String(30), nullable=False, default="rewrite")  # rewrite / revise / polish / adjust_plan
+    chapter_index = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False, default="open")  # open / applied / ignored
+    content = Column(Text, nullable=False)
+    feedback_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="feedback_items")
+    workflow_run = relationship("WorkflowRun", back_populates="feedback_items")
+    chapter = relationship("Chapter", back_populates="feedback_items")
+    artifact = relationship("Artifact")
+    created_by_user = relationship("User", back_populates="feedback_items")
 
 
 class ChapterVersion(Base):
@@ -136,6 +248,8 @@ class ShareLink(Base):
     expires_at = Column(DateTime, nullable=True)  # 可选过期时间
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    project = relationship("Project", back_populates="share_links")
+
 
 class ProjectCollaborator(Base):
     """项目协作者 - 支持多人协作编辑"""
@@ -147,6 +261,9 @@ class ProjectCollaborator(Base):
     role = Column(String(20), default="viewer")  # viewer / editor
     invited_at = Column(DateTime, default=datetime.datetime.utcnow)
     accepted_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="collaborators")
+    user = relationship("User", back_populates="collaborations")
 
 
 class ReadingProgress(Base):
@@ -160,4 +277,3 @@ class ReadingProgress(Base):
     position = Column(Integer, nullable=False, default=1)  # 分页模式：页码；滚动模式：scrollTop
     percentage = Column(Float, default=0.0)  # 阅读百分比 0-1
     last_read_at = Column(DateTime, default=datetime.datetime.utcnow)
-

@@ -55,7 +55,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         username=user_in.username,
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        api_key=secrets.token_urlsafe(32),  # 生成随机API key
+        api_key=None,  # 默认走系统统一配置，用户可在设置页显式填写自己的模型 API Key
     )
     db.add(user)
     db.commit()

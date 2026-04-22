@@ -26,6 +26,7 @@ from backend.schemas import (
     QualityAnalytics,
 )
 from backend.deps import get_current_user
+from backend.workflow_service import create_generation_workflow_run
 from core.config import settings
 
 # 导入Celery任务（可选）
@@ -337,6 +338,16 @@ def trigger_generation(
         progress=0.0,
     )
     db.add(task)
+    db.flush()
+
+    create_generation_workflow_run(
+        db=db,
+        project=project,
+        generation_task=task,
+        triggered_by_user_id=current_user.id,
+        regenerate=regenerate,
+    )
+
     project.status = "generating"
     db.commit()
     db.refresh(task)
@@ -447,18 +458,21 @@ def trigger_export(
 
 @router.get("/{project_id}/export/download", summary="下载导出文件")
 def download_export(
-    request: Request,
     project_id: int,
     task_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """下载已完成的导出文件
-    允许直接浏览器访问（不需要Authorization header），因为：
-    - 浏览器打开下载链接不会携带Authorization header
-    - 只有已完成成功的任务才能下载，安全风险很低
-    """
+    """下载已完成的导出文件，仅允许项目拥有者或协作者访问。"""
     from fastapi.responses import FileResponse
     from celery.result import AsyncResult
+
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
 
     # 先检查任务是否存在且已完成
     task = db.query(GenerationTask).filter(
@@ -475,14 +489,6 @@ def download_export(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"任务未完成，当前状态: {task.status}"
-        )
-
-    # 获取项目（这里只需要确认项目存在，不需要权限检查因为任务已经成功了）
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="项目不存在"
         )
 
     # 获取 Celery 任务结果

@@ -468,12 +468,12 @@ export const Editor: React.FC = () => {
         <div className="flex gap-2">
           {project?.chapters && project.chapters.length > 1 && (
             <>
-              <Link to={`/projects/${id}/edit/${chapterIdx - 1}`}>
+              <Link to={`/projects/${id}/write/${chapterIdx - 1}`}>
                 <Button variant="secondary" size="sm" disabled={chapterIdx <= 1}>
                   上一章
                 </Button>
               </Link>
-              <Link to={`/projects/${id}/edit/${chapterIdx + 1}`}>
+              <Link to={`/projects/${id}/write/${chapterIdx + 1}`}>
                 <Button variant="secondary" size="sm" disabled={chapterIdx >= project.chapters.length}>
                   下一章
                 </Button>

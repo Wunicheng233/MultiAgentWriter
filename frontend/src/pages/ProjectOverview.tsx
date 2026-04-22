@@ -7,7 +7,7 @@ import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { ProgressBar } from '../components/ProgressBar'
-import { getProject, triggerGenerate, triggerExport, getExportDownloadUrl, getTaskStatus, getProjectTokenStats, createShareLink, listCollaborators, addCollaborator, removeCollaborator, resetProject, updateProject, cleanStuckTasks } from '../utils/endpoints'
+import { getProject, triggerGenerate, triggerExport, downloadExportFile, getTaskStatus, getProjectTokenStats, createShareLink, listCollaborators, addCollaborator, removeCollaborator, resetProject, updateProject, cleanStuckTasks } from '../utils/endpoints'
 import { useAuthStore } from '../store/useAuthStore'
 import { useToast } from '../components/Toast'
 
@@ -157,7 +157,7 @@ export const ProjectOverview: React.FC = () => {
   const handleTriggerGenerate = async () => {
     try {
       // 如果项目已经不是草稿状态（已有生成内容），则自动开启重新生成模式
-      const isRegenerate = data.status !== 'draft'
+      const isRegenerate = data?.status !== 'draft'
       await triggerGenerate(projectId, isRegenerate)
       showToast(isRegenerate ? '重新生成任务已提交，已有章节已清空' : '生成任务已提交', 'success')
       refetch()
@@ -205,9 +205,15 @@ export const ProjectOverview: React.FC = () => {
         setExportStep(status.current_step || '')
 
         if (status.celery_state === 'SUCCESS') {
-          // 触发下载
-          const downloadUrl = getExportDownloadUrl(projectId, exportTaskId)
-          window.open(downloadUrl, '_blank')
+          const { blob, filename } = await downloadExportFile(projectId, exportTaskId)
+          const downloadUrl = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.download = filename
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          URL.revokeObjectURL(downloadUrl)
           setExportPollingId(null)
           setExportTaskId(null)
           showToast('导出完成，开始下载', 'success')

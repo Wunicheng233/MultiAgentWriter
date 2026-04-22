@@ -144,7 +144,7 @@ export const ShareView: React.FC = () => {
       {/* 面板 - 分享模式只支持目录和设置，不支持编辑和进度保存 */}
       <ReaderMenu projectId={0} chapterIndex={currentChapterIndex} isShare={true} />
       <ReaderSettings />
-      <TableOfContents project={projectForToc} projectId={0} chapters={projectForToc.chapters || []} />
+      <TableOfContents projectId={0} chapters={projectForToc.chapters || []} />
       {/* 书签和搜索在分享模式也可用（保存在本地） */}
       <BookmarkPanel projectId={0} chapterIndex={currentChapterIndex} onJump={() => {}} />
       {chapter && <SearchPanel content={chapter.content} onJump={() => {}} />}

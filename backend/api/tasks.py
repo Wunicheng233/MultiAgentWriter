@@ -13,6 +13,7 @@ from backend.database import get_db
 from backend.models import User, GenerationTask, Project, Chapter
 from backend.schemas import GenerationTaskResponse
 from backend.deps import get_current_user
+from backend.workflow_service import create_feedback_item, create_generation_workflow_run
 from celery_app import celery_app
 from tasks.writing_tasks import generate_novel_task
 
@@ -74,6 +75,19 @@ def confirm_chapter(
     # 如果用户不通过且提供了修改意见，需要将反馈保存到项目目录
     # 供orchestrator下次启动时读取并重新优化
     if not request.approved and request.feedback.strip():
+        current_run = task_record.workflow_run
+        create_feedback_item(
+            db=db,
+            project_id=project.id,
+            workflow_run_id=current_run.id if current_run else None,
+            created_by_user_id=current_user.id,
+            content=request.feedback.strip(),
+            chapter_index=chapter_index,
+            feedback_scope="plan" if chapter_index == 0 else "chapter",
+            feedback_type="user_rejection",
+            action_type="adjust_plan" if chapter_index == 0 else "rewrite",
+            feedback_metadata={"source_task_id": task_record.celery_task_id},
+        )
         if project.file_path:
             if chapter_index == 0:
                 # chapter_index = 0 表示策划方案确认
@@ -98,6 +112,16 @@ def confirm_chapter(
         current_step=f"继续生成，等待启动..."
     )
     db.add(new_task_record)
+    db.flush()
+
+    create_generation_workflow_run(
+        db=db,
+        project=project,
+        generation_task=new_task_record,
+        triggered_by_user_id=current_user.id,
+        regenerate=not request.approved,
+        parent_run=task_record.workflow_run,
+    )
     db.commit()
 
     # 更新原项目状态

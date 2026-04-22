@@ -19,7 +19,6 @@ import { updateChapter } from '../../utils/endpoints';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../../components/Toast';
 import type { PaginationResponse } from './types';
-import type { Chapter } from '../../types/api';
 
 const Reader: React.FC = () => {
   const { id, chapterIndex } = useParams<{ id: string; chapterIndex: string }>();
@@ -222,7 +221,7 @@ const Reader: React.FC = () => {
       {/* 浮动面板 */}
       <ReaderMenu projectId={projectId} chapterIndex={currentChapterIndex} />
       <ReaderSettings />
-      <TableOfContents project={project} projectId={projectId} chapters={chapters} />
+      <TableOfContents projectId={projectId} chapters={chapters} />
       <BookmarkPanel
         projectId={projectId}
         chapterIndex={currentChapterIndex}

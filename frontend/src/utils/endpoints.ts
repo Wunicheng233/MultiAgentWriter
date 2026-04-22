@@ -139,6 +139,27 @@ export function getExportDownloadUrl(projectId: number, taskId: number): string 
   return `${api.defaults.baseURL}/projects/${projectId}/export/download?task_id=${taskId}`
 }
 
+export async function downloadExportFile(
+  projectId: number,
+  taskId: number
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await api.get<Blob>(`/projects/${projectId}/export/download`, {
+    params: { task_id: taskId },
+    responseType: 'blob',
+  })
+
+  const disposition = res.headers['content-disposition'] || ''
+  const filenameMatch =
+    disposition.match(/filename\*=UTF-8''([^;]+)/) ||
+    disposition.match(/filename="?([^"]+)"?/)
+  const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : `export-${projectId}-${taskId}`
+
+  return {
+    blob: res.data,
+    filename,
+  }
+}
+
 // ========== Chapter Versions ==========
 
 export interface ChapterVersionInfo {
