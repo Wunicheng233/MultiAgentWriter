@@ -41,6 +41,35 @@ class Token(BaseModel):
 
 # ========== Generation Task ==========
 
+class WorkflowStepRunResponse(BaseModel):
+    id: int
+    step_key: str
+    step_type: str
+    status: str
+    attempt: int
+    chapter_index: Optional[int] = None
+    step_data: Optional[Dict] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowRunResponse(BaseModel):
+    id: int
+    run_kind: str
+    trigger_source: str
+    status: str
+    current_step_key: Optional[str] = None
+    current_chapter: Optional[int] = None
+    run_metadata: Optional[Dict] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    steps: Optional[List[WorkflowStepRunResponse]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class GenerationTaskResponse(BaseModel):
     id: int
     project_id: int
@@ -52,6 +81,7 @@ class GenerationTaskResponse(BaseModel):
     error_message: Optional[str]
     started_at: datetime
     completed_at: Optional[datetime]
+    current_workflow_run: Optional[WorkflowRunResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
 

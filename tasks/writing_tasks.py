@@ -18,7 +18,7 @@ from celery_app import celery_app
 from core.orchestrator import NovelOrchestrator, WaitingForConfirmationError
 from backend.database import SessionLocal
 from backend.models import GenerationTask, Project, User, Chapter
-from backend.workflow_service import update_workflow_run_status
+from backend.workflow_service import materialize_open_feedback_files, update_workflow_run_status
 
 logger = get_task_logger(__name__)
 
@@ -305,6 +305,15 @@ def generate_novel_task(
                 with open(req_file, "w", encoding="utf-8") as f:
                     yaml.dump(user_requirements, f, allow_unicode=True, default_flow_style=False)
                 logger.info(f"Wrote user_requirements.yaml to project directory: {req_file}")
+
+                # 渐进迁移：如果反馈已结构化入库但文件缺失，先从数据库补回反馈文件，
+                # 保持现有 orchestrator 不变，同时降低对“先写文件”的强依赖。
+                materialized_feedback_files = materialize_open_feedback_files(db, project)
+                if materialized_feedback_files:
+                    logger.info(
+                        "Materialized %s feedback file(s) from structured feedback records",
+                        len(materialized_feedback_files),
+                    )
 
         # 获取用户 API Key
         # project -> user -> api_key

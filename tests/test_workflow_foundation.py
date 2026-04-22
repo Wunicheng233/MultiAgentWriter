@@ -458,6 +458,202 @@ class WorkflowFoundationTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_task_status_endpoint_includes_workflow_run_steps_and_feedback(self):
+        owner = self._create_user("status_api_owner", "status_api_owner@example.com")
+        project = self._create_project(owner, name="Status API Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-status-api-1",
+                status="waiting_confirm",
+                progress=0.6,
+                current_chapter=2,
+                current_step="第2章生成完成，等待你审阅确认",
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+
+            run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=task,
+                task_status="progress",
+                current_step_key="generating_chapter",
+                current_chapter=2,
+                metadata_updates={"last_message": "正在生成第 2 章..."},
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=task,
+                task_status="waiting_confirm",
+                current_step_key="waiting_confirm",
+                current_chapter=2,
+                metadata_updates={"waiting_confirmation": True},
+            )
+            feedback = FeedbackItem(
+                project_id=project.id,
+                workflow_run_id=run.id,
+                created_by_user_id=owner.id,
+                feedback_scope="chapter",
+                feedback_type="user_rejection",
+                action_type="rewrite",
+                chapter_index=2,
+                status="open",
+                content="请增强这一章的冲突感。",
+            )
+            db.add(feedback)
+            db.commit()
+        finally:
+            db.close()
+
+        class FakeAsyncResult:
+            def __init__(self, task_id, app=None):
+                self.state = "PROGRESS"
+                self.info = {"percent": 60, "message": "正在生成第 2 章..."}
+                self.result = None
+
+        original_async_result = tasks_api.AsyncResult
+        try:
+            tasks_api.AsyncResult = FakeAsyncResult
+            response = self.client.get("/api/tasks/celery-status-api-1")
+        finally:
+            tasks_api.AsyncResult = original_async_result
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("workflow_run", payload)
+        self.assertEqual(payload["workflow_run"]["status"], "waiting_confirm")
+        self.assertEqual(payload["workflow_run"]["current_step_key"], "waiting_confirm")
+        self.assertEqual(payload["workflow_run"]["current_chapter"], 2)
+        self.assertEqual(
+            [step["step_key"] for step in payload["workflow_run"]["steps"]],
+            ["queued_generation", "generating_chapter", "waiting_confirm"],
+        )
+        self.assertEqual(payload["workflow_run"]["feedback_items"][0]["content"], "请增强这一章的冲突感。")
+
+    def test_project_detail_includes_current_generation_task_workflow_summary(self):
+        owner = self._create_user("project_api_owner", "project_api_owner@example.com")
+        project = self._create_project(owner, name="Project API Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-project-api-1",
+                status="progress",
+                progress=0.4,
+                current_chapter=1,
+                current_step="正在生成第 1 章...",
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=task,
+                task_status="progress",
+                current_step_key="generating_chapter",
+                current_chapter=1,
+                metadata_updates={"last_message": "正在生成第 1 章..."},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.get(f"/api/projects/{project.id}")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("current_generation_task", payload)
+        self.assertEqual(payload["current_generation_task"]["celery_task_id"], "celery-project-api-1")
+        self.assertEqual(payload["current_generation_task"]["current_workflow_run"]["status"], "running")
+        self.assertEqual(payload["current_generation_task"]["current_workflow_run"]["current_step_key"], "generating_chapter")
+
+    def test_generate_task_materializes_feedback_file_from_database_if_missing(self):
+        owner = self._create_user("materialize_owner", "materialize_owner@example.com")
+        project_dir = self.workspace / "materialize-project"
+        project_dir.mkdir()
+        project = self._create_project(owner, name="Materialize Novel", file_path=str(project_dir))
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-materialize-1",
+                status="pending",
+                progress=0.0,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            db.add(
+                FeedbackItem(
+                    project_id=project.id,
+                    workflow_run_id=task.workflow_run.id,
+                    created_by_user_id=owner.id,
+                    feedback_scope="chapter",
+                    feedback_type="user_rejection",
+                    action_type="rewrite",
+                    chapter_index=2,
+                    status="open",
+                    content="请重写第二章，并增强主角与反派的冲突。",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        feedback_file = project_dir / "feedback_2.txt"
+        self.assertFalse(feedback_file.exists())
+
+        class FakeOrchestrator:
+            def __init__(self, project_dir, progress_callback, user_api_key):
+                self.project_dir = Path(project_dir)
+
+            def run_full_novel(self):
+                assert (self.project_dir / "feedback_2.txt").exists(), "structured feedback should be materialized before orchestration"
+                raise writing_tasks.WaitingForConfirmationError(2, "待确认")
+
+        original_session_local = writing_tasks.SessionLocal
+        original_orchestrator = writing_tasks.NovelOrchestrator
+        try:
+            writing_tasks.SessionLocal = self.SessionLocal
+            writing_tasks.NovelOrchestrator = FakeOrchestrator
+            writing_tasks.generate_novel_task.push_request(id="celery-materialize-1", retries=0)
+            result = writing_tasks.generate_novel_task.run(project_dir=str(project_dir), user_id=str(owner.id))
+        finally:
+            writing_tasks.generate_novel_task.pop_request()
+            writing_tasks.SessionLocal = original_session_local
+            writing_tasks.NovelOrchestrator = original_orchestrator
+
+        self.assertTrue(result["waiting_confirmation"])
+        self.assertTrue(feedback_file.exists())
+        self.assertEqual(
+            feedback_file.read_text(encoding="utf-8"),
+            "请重写第二章，并增强主角与反派的冲突。",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

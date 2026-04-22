@@ -26,7 +26,7 @@ from backend.schemas import (
     QualityAnalytics,
 )
 from backend.deps import get_current_user
-from backend.workflow_service import create_generation_workflow_run
+from backend.workflow_service import create_generation_workflow_run, serialize_workflow_run
 from core.config import settings
 
 # 导入Celery任务（可选）
@@ -127,9 +127,20 @@ def get_project(
         GenerationTask.status.in_(["pending", "started", "progress", "waiting_confirm"])
     ).order_by(GenerationTask.started_at.desc()).first()
 
-    # 将 running_task 添加到返回结果
-    result = project.__dict__
-    result['current_generation_task'] = running_task
+    # 将 running_task 添加到返回结果，并附带 workflow 摘要
+    result = project.__dict__.copy()
+    if running_task:
+        current_generation_task = {
+            **running_task.__dict__,
+            "current_workflow_run": serialize_workflow_run(
+                running_task.workflow_run,
+                include_steps=False,
+                include_feedback_items=False,
+            ),
+        }
+        result['current_generation_task'] = current_generation_task
+    else:
+        result['current_generation_task'] = None
 
     return result
 

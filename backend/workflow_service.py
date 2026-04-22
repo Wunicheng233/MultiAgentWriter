@@ -13,6 +13,8 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from pathlib import Path
+
 from backend.models import Artifact, FeedbackItem, GenerationTask, Project, WorkflowRun, WorkflowStepRun
 
 
@@ -265,3 +267,92 @@ def update_workflow_run_status(
 
     db.flush()
     return workflow_run
+
+
+def serialize_workflow_run(
+    workflow_run: WorkflowRun | None,
+    include_steps: bool = False,
+    include_feedback_items: bool = False,
+) -> dict | None:
+    if workflow_run is None:
+        return None
+
+    payload = {
+        "id": workflow_run.id,
+        "run_kind": workflow_run.run_kind,
+        "trigger_source": workflow_run.trigger_source,
+        "status": workflow_run.status,
+        "current_step_key": workflow_run.current_step_key,
+        "current_chapter": workflow_run.current_chapter,
+        "run_metadata": workflow_run.run_metadata or {},
+        "started_at": workflow_run.started_at,
+        "completed_at": workflow_run.completed_at,
+    }
+
+    if include_steps:
+        ordered_steps = sorted(workflow_run.step_runs, key=lambda step: step.id)
+        payload["steps"] = [
+            {
+                "id": step.id,
+                "step_key": step.step_key,
+                "step_type": step.step_type,
+                "status": step.status,
+                "attempt": step.attempt,
+                "chapter_index": step.chapter_index,
+                "step_data": step.step_data or {},
+                "started_at": step.started_at,
+                "completed_at": step.completed_at,
+            }
+            for step in ordered_steps
+        ]
+
+    if include_feedback_items:
+        ordered_feedback = sorted(workflow_run.feedback_items, key=lambda item: item.id, reverse=True)
+        payload["feedback_items"] = [
+            {
+                "id": item.id,
+                "feedback_scope": item.feedback_scope,
+                "feedback_type": item.feedback_type,
+                "action_type": item.action_type,
+                "chapter_index": item.chapter_index,
+                "status": item.status,
+                "content": item.content,
+                "created_at": item.created_at,
+            }
+            for item in ordered_feedback
+        ]
+
+    return payload
+
+
+def materialize_open_feedback_files(
+    db: Session,
+    project: Project,
+) -> list[str]:
+    if not project.file_path:
+        return []
+
+    project_dir = Path(project.file_path)
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    open_feedback_items = db.query(FeedbackItem).filter(
+        FeedbackItem.project_id == project.id,
+        FeedbackItem.status == "open",
+    ).order_by(FeedbackItem.id.asc()).all()
+
+    materialized_files: list[str] = []
+    for item in open_feedback_items:
+        if item.chapter_index == 0 or item.feedback_scope == "plan":
+            feedback_file = project_dir / "feedback_plan.txt"
+        elif item.chapter_index is not None:
+            feedback_file = project_dir / f"feedback_{item.chapter_index}.txt"
+        else:
+            continue
+
+        if feedback_file.exists():
+            continue
+
+        feedback_file.write_text(item.content, encoding="utf-8")
+        materialized_files.append(str(feedback_file))
+
+    return materialized_files

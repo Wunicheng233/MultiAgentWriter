@@ -13,7 +13,7 @@ from backend.database import get_db
 from backend.models import User, GenerationTask, Project, Chapter
 from backend.schemas import GenerationTaskResponse
 from backend.deps import get_current_user
-from backend.workflow_service import create_feedback_item, create_generation_workflow_run
+from backend.workflow_service import create_feedback_item, create_generation_workflow_run, serialize_workflow_run
 from celery_app import celery_app
 from tasks.writing_tasks import generate_novel_task
 
@@ -179,6 +179,11 @@ def get_task_status(
         "error_message": task_record.error_message,
         "started_at": task_record.started_at,
         "completed_at": task_record.completed_at,
+        "workflow_run": serialize_workflow_run(
+            task_record.workflow_run,
+            include_steps=True,
+            include_feedback_items=True,
+        ),
     }
 
     # 如果PROGRESS，从result.info获取更详细进度
