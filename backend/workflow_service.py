@@ -32,6 +32,91 @@ def _next_artifact_version(
     return (current_max or 0) + 1
 
 
+def _infer_step_type(step_key: str) -> str:
+    mapping = {
+        "queued_generation": "system",
+        "booting": "system",
+        "planning": "planner",
+        "generating_settings": "planner",
+        "generating_chapter": "generator",
+        "waiting_confirm": "approval",
+        "completed": "system",
+        "failed": "system",
+        "cancelled": "system",
+    }
+    return mapping.get(step_key, "system")
+
+
+def _sync_workflow_step_run(
+    db: Session,
+    workflow_run: WorkflowRun,
+    task_status: str,
+    step_key: str | None,
+    chapter_index: int | None,
+    step_data: dict | None = None,
+) -> None:
+    if not step_key:
+        return
+
+    now = datetime.utcnow()
+    step_status_mapping = {
+        "pending": "pending",
+        "started": "running",
+        "progress": "running",
+        "waiting_confirm": "waiting_confirm",
+        "success": "completed",
+        "failure": "failed",
+        "cancelled": "cancelled",
+    }
+    desired_status = step_status_mapping.get(task_status, "running")
+
+    active_steps = db.query(WorkflowStepRun).filter(
+        WorkflowStepRun.workflow_run_id == workflow_run.id,
+        WorkflowStepRun.status.in_(["pending", "running", "waiting_confirm"]),
+    ).all()
+    for active_step in active_steps:
+        same_step = active_step.step_key == step_key and active_step.chapter_index == chapter_index
+        if not same_step:
+            active_step.status = "completed"
+            active_step.completed_at = active_step.completed_at or now
+
+    current_step = db.query(WorkflowStepRun).filter(
+        WorkflowStepRun.workflow_run_id == workflow_run.id,
+        WorkflowStepRun.step_key == step_key,
+        WorkflowStepRun.chapter_index == chapter_index,
+    ).order_by(WorkflowStepRun.id.desc()).first()
+
+    if current_step is None:
+        current_step = WorkflowStepRun(
+            workflow_run_id=workflow_run.id,
+            step_key=step_key,
+            step_type=_infer_step_type(step_key),
+            status=desired_status,
+            chapter_index=chapter_index,
+            step_data=step_data or {},
+            started_at=now,
+        )
+        if desired_status in {"completed", "failed", "cancelled"}:
+            current_step.completed_at = now
+        db.add(current_step)
+        db.flush()
+        return
+
+    merged_step_data = dict(current_step.step_data or {})
+    if step_data:
+        merged_step_data.update(step_data)
+    current_step.step_data = merged_step_data
+    current_step.step_type = _infer_step_type(step_key)
+    current_step.status = desired_status
+    current_step.started_at = current_step.started_at or now
+    if desired_status in {"completed", "failed", "cancelled"}:
+        current_step.completed_at = current_step.completed_at or now
+    elif desired_status == "waiting_confirm":
+        current_step.completed_at = None
+    else:
+        current_step.completed_at = None
+
+
 def create_generation_workflow_run(
     db: Session,
     project: Project,
@@ -157,6 +242,21 @@ def update_workflow_run_status(
         merged_metadata = dict(workflow_run.run_metadata or {})
         merged_metadata.update(metadata_updates)
         workflow_run.run_metadata = merged_metadata
+
+    step_data = {
+        "task_status": task_status,
+        "workflow_status": workflow_run.status,
+    }
+    if metadata_updates:
+        step_data.update(metadata_updates)
+    _sync_workflow_step_run(
+        db=db,
+        workflow_run=workflow_run,
+        task_status=task_status,
+        step_key=current_step_key,
+        chapter_index=current_chapter,
+        step_data=step_data,
+    )
 
     if workflow_run.status in {"completed", "failed", "cancelled"}:
         workflow_run.completed_at = datetime.utcnow()

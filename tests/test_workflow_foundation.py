@@ -13,8 +13,8 @@ import tasks.writing_tasks as writing_tasks
 from backend.database import Base, get_db
 from backend.deps import get_current_user
 from backend.main import app
-from backend.models import Artifact, FeedbackItem, GenerationTask, Project, User, WorkflowRun
-from backend.workflow_service import update_workflow_run_status
+from backend.models import Artifact, FeedbackItem, GenerationTask, Project, User, WorkflowRun, WorkflowStepRun
+from backend.workflow_service import create_generation_workflow_run, update_workflow_run_status
 
 
 class WorkflowFoundationTests(unittest.TestCase):
@@ -124,6 +124,13 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(artifact.version_number, 1)
             self.assertTrue(artifact.is_current)
             self.assertEqual(artifact.content_json["novel_name"], "Workflow Novel")
+
+            queued_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "queued_generation",
+            ).one()
+            self.assertEqual(queued_step.status, "completed")
+            self.assertEqual(queued_step.step_type, "system")
         finally:
             db.close()
 
@@ -222,6 +229,11 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.refresh(run)
             self.assertEqual(run.status, "running")
             self.assertEqual(run.current_step_key, "booting")
+            booting_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "booting",
+            ).one()
+            self.assertEqual(booting_step.status, "running")
 
             update_workflow_run_status(
                 db=db,
@@ -236,6 +248,16 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(run.current_step_key, "generating_chapter")
             self.assertEqual(run.current_chapter, 3)
             self.assertEqual(run.run_metadata["last_message"], "正在生成第 3 章...")
+            db.refresh(booting_step)
+            self.assertEqual(booting_step.status, "completed")
+            chapter_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "generating_chapter",
+                WorkflowStepRun.chapter_index == 3,
+            ).one()
+            self.assertEqual(chapter_step.status, "running")
+            self.assertEqual(chapter_step.step_type, "generator")
+            self.assertEqual(chapter_step.step_data["last_message"], "正在生成第 3 章...")
 
             update_workflow_run_status(
                 db=db,
@@ -247,6 +269,15 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.refresh(run)
             self.assertEqual(run.status, "waiting_confirm")
             self.assertEqual(run.current_step_key, "waiting_confirm")
+            db.refresh(chapter_step)
+            self.assertEqual(chapter_step.status, "completed")
+            waiting_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "waiting_confirm",
+                WorkflowStepRun.chapter_index == 3,
+            ).one()
+            self.assertEqual(waiting_step.status, "waiting_confirm")
+            self.assertEqual(waiting_step.step_type, "approval")
 
             update_workflow_run_status(
                 db=db,
@@ -258,6 +289,14 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(run.status, "completed")
             self.assertEqual(run.current_step_key, "completed")
             self.assertIsNotNone(run.completed_at)
+            db.refresh(waiting_step)
+            self.assertEqual(waiting_step.status, "completed")
+            completed_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "completed",
+            ).one()
+            self.assertEqual(completed_step.status, "completed")
+            self.assertEqual(completed_step.step_type, "system")
         finally:
             db.close()
 
@@ -278,16 +317,12 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.add(task)
             db.commit()
             db.refresh(task)
-
-            run = WorkflowRun(
-                project_id=project.id,
-                generation_task_id=task.id,
-                run_kind="generation",
-                trigger_source="manual",
-                status="pending",
+            create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
                 triggered_by_user_id=owner.id,
             )
-            db.add(run)
             db.commit()
         finally:
             db.close()
@@ -324,6 +359,21 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(run.current_step_key, "waiting_confirm")
             self.assertEqual(run.current_chapter, 2)
             self.assertTrue(run.run_metadata["waiting_confirmation"])
+            step_keys = [
+                (step.step_key, step.status, step.chapter_index)
+                for step in db.query(WorkflowStepRun)
+                .filter(WorkflowStepRun.workflow_run_id == run.id)
+                .order_by(WorkflowStepRun.id)
+            ]
+            self.assertEqual(
+                step_keys,
+                [
+                    ("queued_generation", "completed", None),
+                    ("booting", "completed", None),
+                    ("generating_chapter", "completed", 2),
+                    ("waiting_confirm", "waiting_confirm", 2),
+                ],
+            )
         finally:
             db.close()
 
@@ -347,16 +397,12 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.add(task)
             db.commit()
             db.refresh(task)
-
-            run = WorkflowRun(
-                project_id=project.id,
-                generation_task_id=task.id,
-                run_kind="generation",
-                trigger_source="manual",
-                status="pending",
+            create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
                 triggered_by_user_id=owner.id,
             )
-            db.add(run)
             db.commit()
         finally:
             db.close()
@@ -394,6 +440,21 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(run.current_step_key, "completed")
             self.assertIsNotNone(run.completed_at)
             self.assertTrue(run.run_metadata["completed"])
+            step_keys = [
+                (step.step_key, step.status, step.chapter_index)
+                for step in db.query(WorkflowStepRun)
+                .filter(WorkflowStepRun.workflow_run_id == run.id)
+                .order_by(WorkflowStepRun.id)
+            ]
+            self.assertEqual(
+                step_keys,
+                [
+                    ("queued_generation", "completed", None),
+                    ("booting", "completed", None),
+                    ("generating_chapter", "completed", 1),
+                    ("completed", "completed", None),
+                ],
+            )
         finally:
             db.close()
 
