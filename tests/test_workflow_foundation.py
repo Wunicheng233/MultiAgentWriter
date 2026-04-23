@@ -1277,6 +1277,253 @@ class WorkflowFoundationTests(unittest.TestCase):
         self.assertEqual(payload["current_generation_task"]["current_workflow_run"]["status"], "running")
         self.assertEqual(payload["current_generation_task"]["current_workflow_run"]["current_step_key"], "generating_chapter")
 
+    def test_workflow_runs_endpoint_returns_recent_runs_with_steps_and_feedback(self):
+        owner = self._create_user("workflow_runs_owner", "workflow_runs_owner@example.com")
+        project = self._create_project(owner, name="Workflow Runs Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            first_task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-workflow-runs-1",
+                status="success",
+                progress=1.0,
+                current_chapter=1,
+            )
+            second_task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-workflow-runs-2",
+                status="waiting_confirm",
+                progress=0.8,
+                current_chapter=2,
+            )
+            db.add_all([first_task, second_task])
+            db.commit()
+            db.refresh(first_task)
+            db.refresh(second_task)
+
+            first_run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=first_task,
+                triggered_by_user_id=owner.id,
+            )
+            second_run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=second_task,
+                triggered_by_user_id=owner.id,
+                parent_run=first_run,
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=first_task,
+                task_status="success",
+                current_step_key="completed",
+                current_chapter=1,
+                metadata_updates={"summary": "第一轮已完成"},
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=second_task,
+                task_status="waiting_confirm",
+                current_step_key="waiting_confirm",
+                current_chapter=2,
+                metadata_updates={"summary": "第二轮等待确认"},
+            )
+            db.add(
+                FeedbackItem(
+                    project_id=project.id,
+                    workflow_run_id=second_run.id,
+                    created_by_user_id=owner.id,
+                    feedback_scope="chapter",
+                    feedback_type="user_note",
+                    action_type="revise",
+                    chapter_index=2,
+                    status="open",
+                    content="请补强第二章结尾钩子。",
+                )
+            )
+            db.commit()
+            first_run_id = first_run.id
+            second_run_id = second_run.id
+            first_task_id = first_task.id
+            second_task_id = second_task.id
+        finally:
+            db.close()
+
+        response = self.client.get(f"/api/projects/{project.id}/workflow-runs")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual([item["id"] for item in payload["items"]], [second_run_id, first_run_id])
+        latest_run = payload["items"][0]
+        self.assertEqual(latest_run["generation_task_id"], second_task_id)
+        self.assertEqual(latest_run["parent_run_id"], first_run_id)
+        self.assertEqual(latest_run["run_kind"], "generation")
+        self.assertEqual(latest_run["trigger_source"], "feedback")
+        self.assertEqual(latest_run["status"], "waiting_confirm")
+        self.assertEqual(latest_run["steps"][-1]["step_key"], "waiting_confirm")
+        self.assertEqual(latest_run["feedback_items"][0]["content"], "请补强第二章结尾钩子。")
+
+    def test_artifacts_endpoint_filters_by_scope_current_only_and_workflow_run(self):
+        owner = self._create_user("artifact_api_owner", "artifact_api_owner@example.com")
+        project = self._create_project(owner, name="Artifact API Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-artifact-api-1",
+                status="progress",
+                progress=0.5,
+                current_chapter=2,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+
+            run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            initial_project_snapshot = db.query(Artifact).filter(
+                Artifact.workflow_run_id == run.id,
+                Artifact.artifact_type == "project_config_snapshot",
+                Artifact.scope == "project",
+            ).one()
+            project_artifact_v1 = create_artifact(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                artifact_type="project_config_snapshot",
+                scope="project",
+                source="system",
+                content_json={"version": 1},
+            )
+            project_artifact_v2 = create_artifact(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                artifact_type="project_config_snapshot",
+                scope="project",
+                source="system",
+                content_json={"version": 2},
+            )
+            chapter_artifact_v1 = create_artifact(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                artifact_type="chapter_draft",
+                scope="chapter",
+                chapter_index=2,
+                source="agent",
+                content_text="第二章初稿",
+            )
+            chapter_artifact_v2 = create_artifact(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                artifact_type="chapter_draft",
+                scope="chapter",
+                chapter_index=2,
+                source="agent",
+                content_text="第二章二稿",
+            )
+            db.commit()
+            run_id = run.id
+            initial_project_snapshot_id = initial_project_snapshot.id
+            project_artifact_v1_id = project_artifact_v1.id
+            project_artifact_v2_id = project_artifact_v2.id
+            chapter_artifact_v1_id = chapter_artifact_v1.id
+            chapter_artifact_v2_id = chapter_artifact_v2.id
+        finally:
+            db.close()
+
+        response = self.client.get(
+            f"/api/projects/{project.id}/artifacts",
+            params={
+                "artifact_type": "chapter_draft",
+                "scope": "chapter",
+                "chapter_index": 2,
+                "current_only": True,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["items"][0]["id"], chapter_artifact_v2_id)
+        self.assertTrue(payload["items"][0]["is_current"])
+
+        project_scope_response = self.client.get(
+            f"/api/projects/{project.id}/artifacts",
+            params={
+                "artifact_type": "project_config_snapshot",
+                "scope": "project",
+            },
+        )
+        self.assertEqual(project_scope_response.status_code, 200)
+        project_scope_payload = project_scope_response.json()
+        self.assertEqual(project_scope_payload["total"], 3)
+        self.assertEqual(
+            [item["id"] for item in project_scope_payload["items"]],
+            [project_artifact_v2_id, project_artifact_v1_id, initial_project_snapshot_id],
+        )
+
+        run_filtered_response = self.client.get(
+            f"/api/projects/{project.id}/artifacts",
+            params={
+                "workflow_run_id": run_id,
+                "scope": "chapter",
+            },
+        )
+        self.assertEqual(run_filtered_response.status_code, 200)
+        run_filtered_payload = run_filtered_response.json()
+        self.assertEqual(
+            [item["id"] for item in run_filtered_payload["items"]],
+            [chapter_artifact_v2_id, chapter_artifact_v1_id],
+        )
+
+    def test_artifact_detail_endpoint_returns_full_content(self):
+        owner = self._create_user("artifact_detail_owner", "artifact_detail_owner@example.com")
+        project = self._create_project(owner, name="Artifact Detail Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            artifact = create_artifact(
+                db=db,
+                project_id=project.id,
+                artifact_type="chapter_evaluation",
+                scope="chapter",
+                chapter_index=3,
+                source="agent",
+                content_json={
+                    "overall_score": 8.7,
+                    "strengths": ["节奏稳定", "结尾钩子清晰"],
+                    "issues": [{"dimension": "冲突", "summary": "中段张力略弱"}],
+                },
+            )
+            db.commit()
+            artifact_id = artifact.id
+        finally:
+            db.close()
+
+        response = self.client.get(f"/api/projects/{project.id}/artifacts/{artifact_id}")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], artifact_id)
+        self.assertEqual(payload["artifact_type"], "chapter_evaluation")
+        self.assertEqual(payload["scope"], "chapter")
+        self.assertEqual(payload["chapter_index"], 3)
+        self.assertIsNone(payload["content_text"])
+        self.assertEqual(payload["content_json"]["overall_score"], 8.7)
+        self.assertEqual(payload["content_json"]["issues"][0]["dimension"], "冲突")
+
     def test_generate_task_materializes_feedback_file_from_database_if_missing(self):
         owner = self._create_user("materialize_owner", "materialize_owner@example.com")
         project_dir = self.workspace / "materialize-project"

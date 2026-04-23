@@ -4,12 +4,16 @@ import type {
   User,
   Token,
   Project,
+  ArtifactDetail,
+  ArtifactListResponse,
   Chapter,
   GenerationTask,
   QualityAnalytics,
   ProjectCreate,
   ChapterUpdate,
   TaskStatus,
+  WorkflowRun,
+  WorkflowRunListResponse,
 } from '../types/api'
 
 // ========== Auth ==========
@@ -60,6 +64,47 @@ export async function createProject(data: ProjectCreate): Promise<Project> {
 
 export async function getProject(projectId: number): Promise<Project> {
   const res = await api.get<Project>(`/projects/${projectId}`)
+  return res.data
+}
+
+export async function getProjectWorkflowRuns(
+  projectId: number,
+  params?: { limit?: number; include_steps?: boolean; include_feedback_items?: boolean }
+): Promise<WorkflowRunListResponse> {
+  const res = await api.get<WorkflowRunListResponse>(`/projects/${projectId}/workflow-runs`, { params })
+  return res.data
+}
+
+export async function getProjectWorkflowRun(
+  projectId: number,
+  runId: number,
+  params?: { include_steps?: boolean; include_feedback_items?: boolean }
+) : Promise<WorkflowRun> {
+  const res = await api.get<WorkflowRun>(`/projects/${projectId}/workflow-runs/${runId}`, { params })
+  return res.data
+}
+
+export async function getProjectArtifacts(
+  projectId: number,
+  params?: {
+    limit?: number
+    workflow_run_id?: number
+    chapter_index?: number
+    artifact_type?: string
+    scope?: string
+    current_only?: boolean
+    include_content?: boolean
+  }
+): Promise<ArtifactListResponse> {
+  const res = await api.get<ArtifactListResponse>(`/projects/${projectId}/artifacts`, { params })
+  return res.data
+}
+
+export async function getProjectArtifact(
+  projectId: number,
+  artifactId: number
+): Promise<ArtifactDetail> {
+  const res = await api.get<ArtifactDetail>(`/projects/${projectId}/artifacts/${artifactId}`)
   return res.data
 }
 

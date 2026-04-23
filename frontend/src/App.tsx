@@ -13,6 +13,8 @@ import Dashboard from './pages/Dashboard'
 import CreateProject from './pages/CreateProject'
 import ProjectOverview from './pages/ProjectOverview'
 import ChapterList from './pages/ChapterList'
+import WorkflowRunDetail from './pages/WorkflowRunDetail'
+import ArtifactDetail from './pages/ArtifactDetail'
 import Editor from './pages/Editor'
 import QualityDashboard from './pages/QualityDashboard'
 import ShareView from './pages/ShareView'
@@ -80,6 +82,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ChapterList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/projects/:id/workflows/:runId"
+              element={
+                <ProtectedRoute>
+                  <WorkflowRunDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/projects/:id/artifacts/:artifactId"
+              element={
+                <ProtectedRoute>
+                  <ArtifactDetail />
                 </ProtectedRoute>
               }
             />

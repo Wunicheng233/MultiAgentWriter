@@ -62,6 +62,18 @@ class ArtifactSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ArtifactResponse(ArtifactSummaryResponse):
+    workflow_run_id: Optional[int] = None
+    chapter_id: Optional[int] = None
+    content_text: Optional[str] = None
+    content_json: Optional[dict | list] = None
+
+
+class ArtifactListResponse(BaseModel):
+    total: int
+    items: List[ArtifactResponse]
+
+
 class WorkflowStepRunResponse(BaseModel):
     id: int
     step_key: str
@@ -80,8 +92,23 @@ class WorkflowStepRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WorkflowFeedbackItemResponse(BaseModel):
+    id: int
+    feedback_scope: str
+    feedback_type: str
+    action_type: str
+    chapter_index: Optional[int] = None
+    status: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class WorkflowRunResponse(BaseModel):
     id: int
+    generation_task_id: Optional[int] = None
+    parent_run_id: Optional[int] = None
     run_kind: str
     trigger_source: str
     status: str
@@ -91,6 +118,7 @@ class WorkflowRunResponse(BaseModel):
     started_at: datetime
     completed_at: Optional[datetime] = None
     steps: Optional[List[WorkflowStepRunResponse]] = None
+    feedback_items: Optional[List[WorkflowFeedbackItemResponse]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -175,6 +203,11 @@ class ProjectResponse(BaseModel):
 class ProjectListResponse(BaseModel):
     total: int
     items: List[ProjectResponse]
+
+
+class WorkflowRunListResponse(BaseModel):
+    total: int
+    items: List[WorkflowRunResponse]
 
 
 # ========== Chapter ==========

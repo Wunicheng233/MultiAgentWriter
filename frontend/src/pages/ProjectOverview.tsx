@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React, { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { Card } from '../components/Card'
@@ -8,16 +8,259 @@ import type { BadgeVariant } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { ProgressBar } from '../components/ProgressBar'
-import { getProject, triggerGenerate, triggerExport, downloadExportFile, getTaskStatus, getProjectTokenStats, createShareLink, listCollaborators, addCollaborator, removeCollaborator, resetProject, updateProject, cleanStuckTasks } from '../utils/endpoints'
+import {
+  addCollaborator,
+  cleanStuckTasks,
+  createShareLink,
+  downloadExportFile,
+  getProjectArtifacts,
+  getProject,
+  getProjectTokenStats,
+  getTaskStatus,
+  listCollaborators,
+  removeCollaborator,
+  resetProject,
+  triggerExport,
+  triggerGenerate,
+  updateProject,
+} from '../utils/endpoints'
+import type { GenerationTask, Project, WorkflowRun } from '../types/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { useToast } from '../components/toastContext'
 import { getErrorMessage } from '../utils/errorMessage'
+import {
+  getAgentStates,
+  getProjectStatusText,
+  getTaskStatusText,
+  inferCurrentFlowStep,
+} from '../utils/workflow'
+import {
+  getArtifactDisplayName,
+  getArtifactScopeLabel,
+} from '../utils/artifact'
+
+type FlowStep = {
+  key: string
+  title: string
+  description: string
+}
+
+type AgentCardConfig = {
+  key: 'planner' | 'writer' | 'critic' | 'revise'
+  title: string
+  subtitle: string
+}
+
+const flowSteps: FlowStep[] = [
+  {
+    key: 'idea',
+    title: '创意设定',
+    description: '整理题材、核心钩子和目标章节范围',
+  },
+  {
+    key: 'plan',
+    title: '策划拆解',
+    description: 'Planner 生成设定圣经与分章大纲',
+  },
+  {
+    key: 'draft',
+    title: '章节生成',
+    description: 'Writer 根据上下文和大纲产出初稿',
+  },
+  {
+    key: 'review',
+    title: '评审修订',
+    description: 'Guardrails、Critic、Revise 组成质量闭环',
+  },
+  {
+    key: 'deliver',
+    title: '交付分享',
+    description: '编辑、导出、创建分享链接，进入展示阶段',
+  },
+]
+
+const agentCards: AgentCardConfig[] = [
+  {
+    key: 'planner',
+    title: 'Planner',
+    subtitle: '把需求扩成结构化设定与章节路线',
+  },
+  {
+    key: 'writer',
+    title: 'Writer',
+    subtitle: '结合上下文与章节目标生成正文初稿',
+  },
+  {
+    key: 'critic',
+    title: 'Critic',
+    subtitle: '按情节、人物、钩子、文笔、设定打分',
+  },
+  {
+    key: 'revise',
+    title: 'Revise',
+    subtitle: '根据问题清单对章节进行定向修订',
+  },
+]
+
+function getProjectStatusColor(status: string): BadgeVariant {
+  switch (status) {
+    case 'draft':
+      return 'secondary'
+    case 'generating':
+      return 'status'
+    case 'completed':
+      return 'agent'
+    case 'failed':
+      return 'genre'
+    default:
+      return 'genre'
+  }
+}
+
+function getTaskStatusColor(task?: GenerationTask | null): BadgeVariant {
+  if (!task) return 'secondary'
+
+  switch (task.status) {
+    case 'success':
+      return 'agent'
+    case 'waiting_confirm':
+      return 'genre'
+    case 'failure':
+      return 'genre'
+    case 'progress':
+    case 'started':
+    case 'pending':
+      return 'status'
+    default:
+      return 'secondary'
+  }
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return '暂无'
+  return new Date(value).toLocaleString()
+}
+
+function getFlowStepStatus(project: Project, stepKey: string): 'done' | 'active' | 'idle' {
+  const currentStep = inferCurrentFlowStep(project)
+  const currentIndex = flowSteps.findIndex(step => step.key === currentStep)
+  const stepIndex = flowSteps.findIndex(step => step.key === stepKey)
+
+  if (project.status === 'completed') return 'done'
+  if (project.status === 'draft') {
+    if (stepKey === 'idea') return 'active'
+    return 'idle'
+  }
+  if (stepIndex < currentIndex) return 'done'
+  if (stepIndex === currentIndex) return 'active'
+  return 'idle'
+}
+
+function getRunSummary(project: Project): {
+  headline: string
+  detail: string
+  ctaLabel: string
+  ctaHref?: string
+} {
+  const task = project.current_generation_task
+  const workflow = task?.current_workflow_run
+
+  if (project.status === 'draft') {
+    return {
+      headline: '项目还未开始生成',
+      detail: '现在最适合从这一页直接启动比赛主路径，先产出策划方案，再进入章节创作。',
+      ctaLabel: '开始生成',
+    }
+  }
+
+  if (task?.status === 'waiting_confirm') {
+    if (workflow?.current_chapter === 0) {
+      return {
+        headline: '策划方案正在等待人工确认',
+        detail: '这一步最能体现人在环路。确认后系统会继续进入逐章生成。',
+        ctaLabel: '进入写作台',
+        ctaHref: `/projects/${project.id}/write/1`,
+      }
+    }
+    return {
+      headline: `第 ${workflow?.current_chapter || task.current_chapter || 1} 章正在等待人工确认`,
+      detail: '当前章节已经过多 Agent 流程处理，现在需要作者决定继续通过还是给出修改意见。',
+      ctaLabel: '处理当前章节',
+      ctaHref: `/projects/${project.id}/write/${workflow?.current_chapter || task.current_chapter || 1}`,
+    }
+  }
+
+  if (project.status === 'completed') {
+    return {
+      headline: '作品已经进入可交付状态',
+      detail: '现在可以从这一页直接查看质量分析、导出文件或创建只读分享链接。',
+      ctaLabel: '查看章节',
+      ctaHref: `/projects/${project.id}/chapters`,
+    }
+  }
+
+  if (project.status === 'failed' || task?.status === 'failure') {
+    return {
+      headline: '最近一次运行失败',
+      detail: task?.error_message || '建议检查任务状态后重新发起生成，或者先清理卡住的任务队列。',
+      ctaLabel: '重新生成',
+    }
+  }
+
+  return {
+    headline: '多 Agent 创作流程正在运行',
+    detail: task?.current_step || '系统正在推进当前工作流，你可以从章节页观察实时结果。',
+    ctaLabel: '查看章节',
+    ctaHref: `/projects/${project.id}/chapters`,
+  }
+}
+
+function getModeLabel(project: Project): string {
+  const config = project.config
+  if (!config) return '标准模式'
+
+  if (config.skip_plan_confirmation && config.skip_chapter_confirmation) {
+    return '全自动生成'
+  }
+  if (!config.skip_plan_confirmation && config.skip_chapter_confirmation) {
+    return '策划确认模式'
+  }
+  if (!config.skip_plan_confirmation && !config.skip_chapter_confirmation) {
+    return '逐章共创模式'
+  }
+  return '章节接管模式'
+}
+
+function getStepBadgeVariant(status: 'done' | 'active' | 'idle'): BadgeVariant {
+  if (status === 'done') return 'agent'
+  if (status === 'active') return 'status'
+  return 'secondary'
+}
+
+function getAgentBadgeVariant(status: 'idle' | 'running' | 'done' | 'error'): BadgeVariant {
+  if (status === 'done') return 'agent'
+  if (status === 'running') return 'status'
+  if (status === 'error') return 'genre'
+  return 'secondary'
+}
+
+function renderWorkflowMeta(workflow?: WorkflowRun): Array<{ label: string; value: string }> {
+  if (!workflow) return []
+
+  return [
+    { label: '运行 ID', value: `#${workflow.id}` },
+    { label: '运行类型', value: workflow.run_kind },
+    { label: '触发来源', value: workflow.trigger_source },
+    { label: '当前节点', value: workflow.current_step_key || '等待系统推进' },
+  ]
+}
 
 export const ProjectOverview: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const projectId = parseInt(id!)
+  const projectId = parseInt(id!, 10)
   const { showToast } = useToast()
   const user = useAuthStore(state => state.user)
+  const queryClient = useQueryClient()
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['project', projectId],
@@ -27,6 +270,22 @@ export const ProjectOverview: React.FC = () => {
   const { data: tokenStats } = useQuery({
     queryKey: ['project-token-stats', projectId],
     queryFn: () => getProjectTokenStats(projectId),
+    enabled: !!data,
+  })
+
+  const { data: recentArtifacts } = useQuery({
+    queryKey: ['project-artifacts', projectId, 'current'],
+    queryFn: () => getProjectArtifacts(projectId, {
+      limit: 4,
+      current_only: true,
+      include_content: false,
+    }),
+    enabled: !!data,
+  })
+
+  const { data: collaborators = [] } = useQuery({
+    queryKey: ['collaborators', projectId],
+    queryFn: () => listCollaborators(projectId),
     enabled: !!data,
   })
 
@@ -43,9 +302,6 @@ export const ProjectOverview: React.FC = () => {
   const [editingConfig, setEditingConfig] = useState(false)
   const [cleaningStuck, setCleaningStuck] = useState(false)
   const [showCleanConfirm, setShowCleanConfirm] = useState(false)
-  const queryClient = useQueryClient()
-
-  // 可编辑的配置状态
   const [configForm, setConfigForm] = useState({
     skip_plan_confirmation: false,
     skip_chapter_confirmation: false,
@@ -72,39 +328,49 @@ export const ProjectOverview: React.FC = () => {
     },
   })
 
-  // 当数据加载完成，同步到表单
   useEffect(() => {
-    if (data?.config) {
-      setConfigForm({
-        skip_plan_confirmation: data.config.skip_plan_confirmation ?? false,
-        skip_chapter_confirmation: data.config.skip_chapter_confirmation ?? false,
-        allow_plot_adjustment: data.config.allow_plot_adjustment ?? false,
-        chapter_word_count: data.config.chapter_word_count ?? 2000,
-        start_chapter: data.config.start_chapter ?? 1,
-        end_chapter: data.config.end_chapter ?? 10,
-      })
-    }
+    if (!data?.config) return
+
+    setConfigForm({
+      skip_plan_confirmation: data.config.skip_plan_confirmation ?? false,
+      skip_chapter_confirmation: data.config.skip_chapter_confirmation ?? false,
+      allow_plot_adjustment: data.config.allow_plot_adjustment ?? false,
+      chapter_word_count: data.config.chapter_word_count ?? 2000,
+      start_chapter: data.config.start_chapter ?? 1,
+      end_chapter: data.config.end_chapter ?? 10,
+    })
   }, [data])
 
-  const { data: collaborators = [] } = useQuery({
-    queryKey: ['collaborators', projectId],
-    queryFn: () => listCollaborators(projectId),
-    enabled: !!data,
-  })
+  useEffect(() => {
+    if (!data?.current_generation_task) return
+
+    const shouldPoll =
+      data.status === 'generating' ||
+      data.current_generation_task.status === 'waiting_confirm'
+
+    if (!shouldPoll) return
+
+    const interval = window.setInterval(() => {
+      void refetch()
+    }, 3000)
+
+    return () => window.clearInterval(interval)
+  }, [data, refetch])
 
   const handleAddCollaborator = async () => {
     if (!newCollaboratorUsername.trim()) {
       showToast('请输入用户名', 'error')
       return
     }
+
     try {
       setAddingCollaborator(true)
       await addCollaborator(projectId, newCollaboratorUsername.trim())
       showToast('协作者添加成功', 'success')
       setNewCollaboratorUsername('')
       queryClient.invalidateQueries({ queryKey: ['collaborators', projectId] })
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '添加失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '添加失败'), 'error')
     } finally {
       setAddingCollaborator(false)
     }
@@ -115,8 +381,8 @@ export const ProjectOverview: React.FC = () => {
       await removeCollaborator(projectId, collabId)
       showToast('协作者移除成功', 'success')
       queryClient.invalidateQueries({ queryKey: ['collaborators', projectId] })
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '移除失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '移除失败'), 'error')
     }
   }
 
@@ -125,15 +391,16 @@ export const ProjectOverview: React.FC = () => {
       setShowResetConfirm(true)
       return
     }
+
     try {
       setResetting(true)
       await resetProject(projectId)
       showToast('项目已重置为草稿，所有生成内容已清除', 'success')
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       setShowResetConfirm(false)
-      setResetting(false)
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '重置失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '重置失败'), 'error')
+    } finally {
       setResetting(false)
     }
   }
@@ -143,28 +410,28 @@ export const ProjectOverview: React.FC = () => {
       setShowCleanConfirm(true)
       return
     }
+
     try {
       setCleaningStuck(true)
       const result = await cleanStuckTasks(projectId)
       showToast(result.message, result.cleaned_count > 0 ? 'success' : 'info')
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       setShowCleanConfirm(false)
-      setCleaningStuck(false)
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '清理失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '清理失败'), 'error')
+    } finally {
       setCleaningStuck(false)
     }
   }
 
   const handleTriggerGenerate = async () => {
     try {
-      // 如果项目已经不是草稿状态（已有生成内容），则自动开启重新生成模式
       const isRegenerate = data?.status !== 'draft'
       await triggerGenerate(projectId, isRegenerate)
       showToast(isRegenerate ? '重新生成任务已提交，已有章节已清空' : '生成任务已提交', 'success')
       refetch()
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '提交失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '提交失败'), 'error')
     }
   }
 
@@ -176,31 +443,30 @@ export const ProjectOverview: React.FC = () => {
       setExportProgress(0)
       setExportStep(`准备导出 ${format}...`)
       showToast('导出任务已提交', 'success')
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '提交失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '提交失败'), 'error')
     }
   }
 
   const handleCreateShare = async () => {
     try {
       setCreatingShare(true)
-      const res = await createShareLink(projectId)
-      const fullUrl = window.location.origin + res.share_url
+      const result = await createShareLink(projectId)
+      const fullUrl = `${window.location.origin}${result.share_url}`
       setShareUrl(fullUrl)
       await navigator.clipboard.writeText(fullUrl)
       showToast('分享链接已创建并复制到剪贴板', 'success')
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, '创建失败'), 'error')
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error, '创建失败'), 'error')
     } finally {
       setCreatingShare(false)
     }
   }
 
-  // 轮询导出进度
   useEffect(() => {
     if (!exportPollingId || !exportTaskId) return
 
-    const interval = setInterval(async () => {
+    const interval = window.setInterval(async () => {
       try {
         const status = await getTaskStatus(exportPollingId)
         setExportProgress(status.progress * 100)
@@ -220,17 +486,18 @@ export const ProjectOverview: React.FC = () => {
           setExportTaskId(null)
           showToast('导出完成，开始下载', 'success')
         }
+
         if (status.celery_state === 'FAILURE') {
           setExportPollingId(null)
           setExportTaskId(null)
           showToast(status.error || '导出失败', 'error')
         }
-      } catch (e) {
-        console.error(e)
+      } catch (error) {
+        console.error(error)
       }
     }, 2000)
 
-    return () => clearInterval(interval)
+    return () => window.clearInterval(interval)
   }, [exportPollingId, exportTaskId, projectId, showToast])
 
   if (isLoading) {
@@ -250,401 +517,545 @@ export const ProjectOverview: React.FC = () => {
   }
 
   const config = data.config
-  const getStatusColor = (status: string): BadgeVariant => {
-    switch (status) {
-      case 'draft': return 'secondary'
-      case 'generating': return 'status'
-      case 'completed': return 'agent'
-      case 'failed': return 'genre'
-      default: return 'genre'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'draft': return '草稿'
-      case 'generating': return '生成中'
-      case 'completed': return '已完成'
-      case 'failed': return '失败'
-      default: return status
-    }
-  }
+  const workflow = data.current_generation_task?.current_workflow_run
+  const runSummary = getRunSummary(data)
+  const targetStart = config?.start_chapter ?? 1
+  const targetEnd = config?.end_chapter ?? 10
+  const targetChapters = Math.max(targetEnd - targetStart + 1, 0)
+  const completedChapters = data.chapters?.length ?? 0
+  const completedChapterRatio = targetChapters > 0 ? Math.min((completedChapters / targetChapters) * 100, 100) : 0
+  const workflowProgress = data.current_generation_task ? Math.min(data.current_generation_task.progress * 100, 100) : completedChapterRatio
+  const workflowMeta = renderWorkflowMeta(workflow)
+  const agentStates = getAgentStates(data)
+  const isOwner = !!data && !!user && data.user_id === user.id
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <div className="flex items-center gap-4 mb-2">
-              <Link to="/">
-                <Button variant="secondary" size="sm">返回书架</Button>
-              </Link>
-              <h1 className="text-3xl">{data.name}</h1>
-            </div>
-            {data.description && (
-              <p className="text-secondary mt-1">{data.description}</p>
-            )}
-          </div>
-          <Badge variant={getStatusColor(data.status)}>
-            {getStatusText(data.status)}
-          </Badge>
-        </div>
-
-        {/* 基本信息 - 全宽在上 */}
-        <Card>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl">基本信息</h2>
-          {data.status === 'draft' && (
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => setEditingConfig(!editingConfig)}
-            >
-              {editingConfig ? '取消' : '编辑配置'}
-            </Button>
-          )}
-        </div>
-        {!editingConfig ? (
-          <div className="space-y-4 text-lg">
-            {/* 基础信息和人机交互 - 两栏网格 */}
-            <dl className="grid grid-cols-2 gap-6">
-              <div className="space-y-4">
-                {config?.novel_name && (
-                  <div>
-                    <dt className="text-secondary">小说名称</dt>
-                    <dd className="mt-1 text-body font-medium">{config.novel_name}</dd>
-                  </div>
-                )}
-                {config?.chapter_word_count && (
-                  <div>
-                    <dt className="text-secondary">每章字数</dt>
-                    <dd className="mt-1 text-body">{config.chapter_word_count}</dd>
-                  </div>
-                )}
-                {config?.end_chapter && (
-                  <div>
-                    <dt className="text-secondary">章节范围</dt>
-                    <dd className="mt-1 text-body">{config.start_chapter || 1} - {config.end_chapter}</dd>
-                  </div>
-                )}
-                {tokenStats && tokenStats.total_tokens > 0 && (
-                  <div>
-                    <dt className="text-secondary">Token 消耗</dt>
-                    <dd className="mt-1 text-body">
-                      {tokenStats.total_tokens.toLocaleString()} tokens
-                      <span className="text-secondary ml-2 text-xs">
-                        (≈ ${tokenStats.estimated_cost_usd.toFixed(4)})
-                      </span>
-                    </dd>
-                  </div>
-                )}
+      <div className="mx-auto max-w-content space-y-6">
+        <Card className="overflow-hidden border-sage/20 bg-[linear-gradient(135deg,rgba(91,127,110,0.14),rgba(250,247,242,0.96),rgba(192,107,78,0.12))]">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <Link to="/">
+                  <Button variant="secondary" size="sm">返回书架</Button>
+                </Link>
+                <Badge variant={getProjectStatusColor(data.status)}>
+                  {getProjectStatusText(data.status)}
+                </Badge>
+                <Badge variant={getTaskStatusColor(data.current_generation_task)}>
+                  {getTaskStatusText(data.current_generation_task)}
+                </Badge>
+                <Badge variant="secondary">{getModeLabel(data)}</Badge>
               </div>
 
-              {/* 人机交互选项 - 右栏 */}
-              {config && (
-                <div className="space-y-2">
-                  <dt className="text-secondary font-medium">人机交互选项</dt>
-                  <dd className="mt-1 text-body">
-                    <ul className="list-disc list-inside space-y-1 text-base">
-                      <li>跳过策划确认：{config.skip_plan_confirmation ? '是' : '否'}</li>
-                      <li>跳过章节确认：{config.skip_chapter_confirmation ? '是' : '否'}</li>
-                      <li>允许剧情调整：{config.allow_plot_adjustment ? '是' : '否'}</li>
-                    </ul>
-                  </dd>
+              <h1 className="text-3xl md:text-4xl">{data.name}</h1>
+              <p className="mt-3 max-w-2xl text-body">
+                {data.description || '这是当前项目的比赛版总控台，用来查看创作进度、工作流状态和最终交付能力。'}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-3 text-sm text-secondary">
+                <span>目标章节 {targetStart} - {targetEnd}</span>
+                <span>每章约 {config?.chapter_word_count ?? 2000} 字</span>
+                {config?.genre && <span>{config.genre}</span>}
+                {config?.target_platform && <span>面向 {config.target_platform}</span>}
+              </div>
+
+              {config?.core_hook && (
+                <div className="mt-5 rounded-comfortable border border-terracotta/15 bg-white/70 p-4 shadow-ambient">
+                  <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Hook</p>
+                  <p className="mt-2 text-lg text-inkwell">{config.core_hook}</p>
                 </div>
               )}
-            </dl>
+            </div>
 
-            {/* 核心需求 - 独立区块，限制高度可滚动 */}
-            {config?.core_requirement && (
-              <div className="bg-sage/5 rounded-standard p-4 border border-border">
-                <h4 className="text-secondary font-medium mb-3">核心需求</h4>
-                <div className="max-h-96 overflow-y-auto text-body whitespace-pre-line pr-2">
-                  {config.core_requirement}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="每章字数"
-                type="number"
-                value={configForm.chapter_word_count}
-                onChange={e => setConfigForm(prev => ({ ...prev, chapter_word_count: parseInt(e.target.value) }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="起始章节"
-                type="number"
-                value={configForm.start_chapter}
-                onChange={e => setConfigForm(prev => ({ ...prev, start_chapter: parseInt(e.target.value) }))}
-              />
-              <Input
-                label="结束章节"
-                type="number"
-                value={configForm.end_chapter}
-                onChange={e => setConfigForm(prev => ({ ...prev, end_chapter: parseInt(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit_skip_plan"
-                  checked={configForm.skip_plan_confirmation}
-                  onChange={e => setConfigForm(prev => ({ ...prev, skip_plan_confirmation: e.target.checked }))}
-                  className="text-sage rounded border-border focus:ring-sage"
-                />
-                <label htmlFor="edit_skip_plan" className="text-sm text-body">
-                  跳过策划方案人工确认（全自动模式）
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit_skip_chapter"
-                  checked={configForm.skip_chapter_confirmation}
-                  onChange={e => setConfigForm(prev => ({ ...prev, skip_chapter_confirmation: e.target.checked }))}
-                  className="text-sage rounded border-border focus:ring-sage"
-                />
-                <label htmlFor="edit_skip_chapter" className="text-sm text-body">
-                  跳过章节级人工确认（全自动生成全部章节）
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit_allow_plot"
-                  checked={configForm.allow_plot_adjustment}
-                  onChange={e => setConfigForm(prev => ({ ...prev, allow_plot_adjustment: e.target.checked }))}
-                  className="text-sage rounded border-border focus:ring-sage"
-                />
-                <label htmlFor="edit_allow_plot" className="text-sm text-body">
-                  允许每章后调整下一章剧情（人在环路可控创作）
-                </label>
-              </div>
-            </div>
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="primary"
-                onClick={() => updateConfigMutation.mutate()}
-                disabled={updateConfigMutation.isPending}
-              >
-                {updateConfigMutation.isPending ? '保存中...' : '保存配置'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
+            <div className="w-full max-w-md rounded-comfortable border border-white/70 bg-white/75 p-5 shadow-standard backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.24em] text-secondary">Current Run</p>
+              <h2 className="mt-2 text-2xl">{runSummary.headline}</h2>
+              <p className="mt-2 text-secondary">{runSummary.detail}</p>
 
-      {/* 质量评分 - 全宽 */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl mb-4">质量评分</h2>
-            {data.overall_quality_score > 0 ? (
-              <div className="mb-4 w-64">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-secondary">总体评分</span>
-                  <span className="text-body font-medium">{data.overall_quality_score.toFixed(1)}/10</span>
-                </div>
-                <ProgressBar progress={data.overall_quality_score * 10} />
-              </div>
-            ) : (
-              <p className="text-secondary mb-0">尚无评分，生成完成后会自动计算</p>
-            )}
-          </div>
-          {data.overall_quality_score > 0 && (
-            <Link to={`/projects/${projectId}/analytics`}>
-              <Button variant="secondary">
-                查看详细质量分析
-              </Button>
-            </Link>
-          )}
-        </div>
-      </Card>
-
-      {/* 协作者 - 如果有单独占一行 */}
-      {data && user && data.user_id === user.id && ( // Only owner can see collaborators
-        <Card>
-          <h2 className="text-xl mb-4">协作者</h2>
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <Input
-                  label="用户名"
-                  placeholder="输入已注册用户名"
-                  value={newCollaboratorUsername}
-                  onChange={(e) => setNewCollaboratorUsername(e.target.value)}
+              <div className="mt-5 space-y-3">
+                <ProgressBar
+                  progress={workflowProgress}
+                  message={data.current_generation_task?.current_step || `已完成 ${completedChapters}/${targetChapters || completedChapters || 1} 章`}
                 />
-              </div>
-              <div className="pt-[26px]">
-                <Button
-                  variant="primary"
-                  onClick={handleAddCollaborator}
-                  disabled={addingCollaborator}
-                >
-                  {addingCollaborator ? '添加中...' : '添加'}
-                </Button>
-              </div>
-            </div>
-            {collaborators.length > 0 ? (
-              <div className="space-y-2">
-                {collaborators.map(collab => (
-                  <div key={collab.id} className="flex justify-between items-center p-2 border border-border rounded-standard">
-                    <div>
-                      <div className="font-medium">{collab.username}</div>
-                      <div className="text-xs text-secondary">{collab.email} · {collab.role}</div>
-                    </div>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      onClick={() => handleRemoveCollaborator(collab.id)}
-                    >
-                      移除
-                    </Button>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                    <p className="text-secondary">章节进度</p>
+                    <p className="mt-1 text-lg text-inkwell">{completedChapters}/{targetChapters || '-'}</p>
                   </div>
-                ))}
+                  <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                    <p className="text-secondary">质量总分</p>
+                    <p className="mt-1 text-lg text-inkwell">
+                      {data.overall_quality_score > 0 ? `${data.overall_quality_score.toFixed(1)}/10` : '待生成'}
+                    </p>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <p className="text-secondary text-sm">暂无协作者</p>
-            )}
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                {runSummary.ctaHref ? (
+                  <Link to={runSummary.ctaHref}>
+                    <Button variant="primary">{runSummary.ctaLabel}</Button>
+                  </Link>
+                ) : (
+                  <Button variant="primary" onClick={handleTriggerGenerate}>
+                    {runSummary.ctaLabel}
+                  </Button>
+                )}
+                <Link to={`/projects/${projectId}/chapters`}>
+                  <Button variant="secondary">查看章节</Button>
+                </Link>
+                <Link to={`/projects/${projectId}/analytics`}>
+                  <Button variant="secondary">质量分析</Button>
+                </Link>
+                {workflow && (
+                  <Link to={`/projects/${projectId}/workflows/${workflow.id}`}>
+                    <Button variant="secondary">查看当前 Run</Button>
+                  </Link>
+                )}
+              </div>
+            </div>
           </div>
         </Card>
-      )}
 
-      {exportPollingId && (
-        <div className="mb-6">
+        {exportPollingId && (
           <ProgressBar progress={exportProgress} message={exportStep || '导出中...'} />
-        </div>
-      )}
+        )}
 
-      <div className="mt-8 space-y-6">
-        {/* 主要操作区 */}
-        <div className="flex flex-wrap gap-4">
-          <Link to={`/projects/${projectId}/chapters`}>
-            <Button variant="secondary">
-              查看章节
-            </Button>
-          </Link>
-          {data.status !== 'generating' && (
-            <Button variant="primary" onClick={handleTriggerGenerate}>
-              开始生成
-            </Button>
-          )}
-          {data.status === 'generating' && (
-            <Link to={`/projects/${projectId}/write/1`}>
-              <Button variant="primary">
-                进入写作
-              </Button>
-            </Link>
-          )}
-          <Link to={`/projects/${projectId}/analytics`}>
-            <Button variant="secondary">
-              质量分析
-            </Button>
-          </Link>
-          {data.status !== 'draft' && (
-            <Button
-              variant="secondary"
-              onClick={handleResetProject}
-            >
-              重置项目
-            </Button>
-          )}
-        </div>
-
-        {/* 导出与分享区 - 仅完成状态显示 */}
-        {data.status === 'completed' && (
-          <div className="bg-sage/5 rounded-standard p-4 border border-border">
-            <h3 className="text-sm font-medium text-body mb-3">导出与分享</h3>
-            <div className="flex flex-wrap gap-3 mb-3">
-              <Button variant="secondary" onClick={() => handleTriggerExport('epub')} disabled={!!exportPollingId}>
-                导出 EPUB
-              </Button>
-              <Button variant="secondary" onClick={() => handleTriggerExport('docx')} disabled={!!exportPollingId}>
-                导出 DOCX
-              </Button>
-              <Button variant="secondary" onClick={() => handleTriggerExport('html')} disabled={!!exportPollingId}>
-                导出 HTML
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={handleCreateShare}
-                disabled={creatingShare}
-              >
-                {creatingShare ? '创建中...' : shareUrl ? '分享链接已复制' : '创建分享链接'}
-              </Button>
-              <Button
-                variant="tertiary"
-                onClick={() => setShowCleanConfirm(true)}
-                disabled={cleaningStuck}
-              >
-                清理任务队列
-              </Button>
+        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+          <Card>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Flow Story</p>
+                <h2 className="mt-2 text-2xl">比赛演示主路径</h2>
+                <p className="mt-2 text-secondary">
+                  这一页把“从创意到作品交付”的关键路径收成一张总览，方便团队和评委理解系统现在推进到哪里。
+                </p>
+              </div>
+              <Badge variant="secondary">Workflow First</Badge>
             </div>
-            {shareUrl && (
-              <div className="p-2 bg-white rounded-standard border border-border text-xs text-secondary break-all">
-                {shareUrl}
+
+            <div className="mt-6 grid gap-4 md:grid-cols-5">
+              {flowSteps.map((step, index) => {
+                const status = getFlowStepStatus(data, step.key)
+
+                return (
+                  <div
+                    key={step.key}
+                    className={`rounded-comfortable border p-4 ${
+                      status === 'active'
+                        ? 'border-sage/35 bg-sage/10'
+                        : status === 'done'
+                          ? 'border-sage/20 bg-white'
+                          : 'border-border bg-parchment/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-secondary">0{index + 1}</span>
+                      <Badge variant={getStepBadgeVariant(status)}>
+                        {status === 'done' ? 'done' : status === 'active' ? 'now' : 'next'}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-4 text-lg">{step.title}</h3>
+                    <p className="mt-2 text-sm text-secondary">{step.description}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+
+          <Card>
+            <p className="text-xs uppercase tracking-[0.22em] text-secondary">Run Detail</p>
+            <h2 className="mt-2 text-2xl">当前运行摘要</h2>
+
+            <div className="mt-5 space-y-3">
+              {workflowMeta.length > 0 ? (
+                workflowMeta.map(item => (
+                  <div key={item.label} className="rounded-standard border border-border bg-parchment/60 p-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">{item.label}</p>
+                    <p className="mt-1 text-body">{item.value}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                  当前还没有活动中的 workflow run。启动生成后，这里会展示真实运行状态。
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-standard border border-border bg-parchment/60 p-3">
+                  <p className="text-secondary">开始时间</p>
+                  <p className="mt-1 text-body">{formatDateTime(data.current_generation_task?.started_at)}</p>
+                </div>
+                <div className="rounded-standard border border-border bg-parchment/60 p-3">
+                  <p className="text-secondary">当前章节</p>
+                  <p className="mt-1 text-body">
+                    {workflow?.current_chapter ?? data.current_generation_task?.current_chapter ?? '待生成'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-4">
+          {agentCards.map(agent => {
+            const state = agentStates[agent.key]
+
+            return (
+              <Card key={agent.key} className="h-full">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.22em] text-secondary">Agent</p>
+                    <h3 className="mt-2 text-xl">{agent.title}</h3>
+                  </div>
+                  <Badge variant={getAgentBadgeVariant(state)}>
+                    {state === 'done' ? 'done' : state === 'running' ? 'running' : 'idle'}
+                  </Badge>
+                </div>
+                <p className="mt-4 text-secondary">{agent.subtitle}</p>
+              </Card>
+            )
+          })}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <Card>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Project Setup</p>
+                <h2 className="mt-2 text-2xl">创作配置与需求</h2>
+              </div>
+              {data.status === 'draft' && (
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => setEditingConfig(!editingConfig)}
+                >
+                  {editingConfig ? '取消编辑' : '编辑配置'}
+                </Button>
+              )}
+            </div>
+
+            {!editingConfig ? (
+              <div className="mt-5 space-y-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">小说名称</p>
+                    <p className="mt-1 text-body">{config?.novel_name || data.name}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">生成模式</p>
+                    <p className="mt-1 text-body">{getModeLabel(data)}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">章节范围</p>
+                    <p className="mt-1 text-body">{targetStart} - {targetEnd}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">Token 消耗</p>
+                    <p className="mt-1 text-body">
+                      {tokenStats && tokenStats.total_tokens > 0
+                        ? `${tokenStats.total_tokens.toLocaleString()} tokens`
+                        : '尚无消耗记录'}
+                    </p>
+                    {tokenStats && tokenStats.total_tokens > 0 && (
+                      <p className="mt-1 text-xs text-secondary">约 ${tokenStats.estimated_cost_usd.toFixed(4)}</p>
+                    )}
+                  </div>
+                </div>
+
+                {config?.core_requirement && (
+                  <div className="rounded-comfortable border border-border bg-white/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Requirement</p>
+                    <div className="mt-3 max-h-72 overflow-y-auto whitespace-pre-line pr-2 text-body">
+                      {config.core_requirement}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">跳过策划确认</p>
+                    <p className="mt-1 text-body">{config?.skip_plan_confirmation ? '是' : '否'}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">跳过章节确认</p>
+                    <p className="mt-1 text-body">{config?.skip_chapter_confirmation ? '是' : '否'}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-4">
+                    <p className="text-secondary">允许剧情调整</p>
+                    <p className="mt-1 text-body">{config?.allow_plot_adjustment ? '是' : '否'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="每章字数"
+                    type="number"
+                    value={configForm.chapter_word_count}
+                    onChange={event => setConfigForm(prev => ({ ...prev, chapter_word_count: parseInt(event.target.value, 10) || 0 }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="起始章节"
+                    type="number"
+                    value={configForm.start_chapter}
+                    onChange={event => setConfigForm(prev => ({ ...prev, start_chapter: parseInt(event.target.value, 10) || 1 }))}
+                  />
+                  <Input
+                    label="结束章节"
+                    type="number"
+                    value={configForm.end_chapter}
+                    onChange={event => setConfigForm(prev => ({ ...prev, end_chapter: parseInt(event.target.value, 10) || 1 }))}
+                  />
+                </div>
+                <div className="space-y-3 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={configForm.skip_plan_confirmation}
+                      onChange={event => setConfigForm(prev => ({ ...prev, skip_plan_confirmation: event.target.checked }))}
+                      className="rounded border-border text-sage focus:ring-sage"
+                    />
+                    <span>跳过策划方案人工确认</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={configForm.skip_chapter_confirmation}
+                      onChange={event => setConfigForm(prev => ({ ...prev, skip_chapter_confirmation: event.target.checked }))}
+                      className="rounded border-border text-sage focus:ring-sage"
+                    />
+                    <span>跳过章节级人工确认</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={configForm.allow_plot_adjustment}
+                      onChange={event => setConfigForm(prev => ({ ...prev, allow_plot_adjustment: event.target.checked }))}
+                      className="rounded border-border text-sage focus:ring-sage"
+                    />
+                    <span>允许每章后调整下一章剧情</span>
+                  </label>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => updateConfigMutation.mutate()}
+                    disabled={updateConfigMutation.isPending}
+                  >
+                    {updateConfigMutation.isPending ? '保存中...' : '保存配置'}
+                  </Button>
+                </div>
               </div>
             )}
+          </Card>
+
+          <div className="space-y-6">
+            <Card>
+              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Quality</p>
+              <h2 className="mt-2 text-2xl">质量与交付</h2>
+
+              <div className="mt-5 space-y-4">
+                {data.overall_quality_score > 0 ? (
+                  <ProgressBar progress={data.overall_quality_score * 10} message={`总体评分 ${data.overall_quality_score.toFixed(1)}/10`} />
+                ) : (
+                  <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                    尚无评分数据。完成至少一章评审后，这里会显示质量闭环结果。
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-standard border border-border bg-parchment/60 p-3">
+                    <p className="text-secondary">已完成章节</p>
+                    <p className="mt-1 text-body">{completedChapters}</p>
+                  </div>
+                  <div className="rounded-standard border border-border bg-parchment/60 p-3">
+                    <p className="text-secondary">分享状态</p>
+                    <p className="mt-1 text-body">{shareUrl ? '已生成链接' : '待创建'}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Link to={`/projects/${projectId}/analytics`}>
+                    <Button variant="secondary">查看详细质量分析</Button>
+                  </Link>
+                  {data.status !== 'draft' && (
+                    <Button variant="secondary" onClick={() => setShowCleanConfirm(true)} disabled={cleaningStuck}>
+                      清理任务队列
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Delivery</p>
+              <h2 className="mt-2 text-2xl">导出与分享</h2>
+
+              {data.status === 'completed' ? (
+                <div className="mt-5 space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    <Button variant="secondary" onClick={() => handleTriggerExport('epub')} disabled={!!exportPollingId}>
+                      导出 EPUB
+                    </Button>
+                    <Button variant="secondary" onClick={() => handleTriggerExport('docx')} disabled={!!exportPollingId}>
+                      导出 DOCX
+                    </Button>
+                    <Button variant="secondary" onClick={() => handleTriggerExport('html')} disabled={!!exportPollingId}>
+                      导出 HTML
+                    </Button>
+                    <Button variant="secondary" onClick={handleCreateShare} disabled={creatingShare}>
+                      {creatingShare ? '创建中...' : shareUrl ? '分享链接已复制' : '创建分享链接'}
+                    </Button>
+                  </div>
+                  {shareUrl && (
+                    <div className="rounded-standard border border-border bg-parchment/60 p-3 text-sm text-secondary break-all">
+                      {shareUrl}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-5 rounded-standard border border-dashed border-border p-4 text-secondary">
+                  项目完成后即可在这里一键导出成品，并生成无需登录的只读分享页。
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Current Artifacts</p>
+              <h2 className="mt-2 text-2xl">当前关键产物</h2>
+              <p className="mt-2 text-secondary">
+                这些是项目当前版本的核心 artifacts。长期来看，它们会成为创作状态、评审结果和工作流回放的统一事实层。
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {recentArtifacts?.items.map(artifact => (
+                  <div key={artifact.id} className="rounded-standard border border-border bg-parchment/60 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-inkwell">{getArtifactDisplayName(artifact.artifact_type)}</span>
+                          <Badge variant="secondary">{artifact.scope}</Badge>
+                          {artifact.is_current && <Badge variant="agent">current</Badge>}
+                        </div>
+                        <div className="mt-2 text-secondary">
+                          v{artifact.version_number} · {getArtifactScopeLabel(artifact)} · {artifact.source}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Link to={`/projects/${projectId}/artifacts/${artifact.id}`}>
+                          <Button variant="tertiary" size="sm">查看详情</Button>
+                        </Link>
+                        {artifact.workflow_run_id && (
+                          <Link to={`/projects/${projectId}/workflows/${artifact.workflow_run_id}`}>
+                            <Button variant="tertiary" size="sm">查看 Run</Button>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {!recentArtifacts?.items.length && (
+                  <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                    还没有沉淀可展示的当前 artifacts。
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        {isOwner && (
+          <Card>
+            <p className="text-xs uppercase tracking-[0.22em] text-secondary">Team</p>
+            <h2 className="mt-2 text-2xl">协作者</h2>
+
+            <div className="mt-5 space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row">
+                <div className="flex-1">
+                  <Input
+                    label="用户名"
+                    placeholder="输入已注册用户名"
+                    value={newCollaboratorUsername}
+                    onChange={event => setNewCollaboratorUsername(event.target.value)}
+                  />
+                </div>
+                <div className="pt-[26px]">
+                  <Button variant="primary" onClick={handleAddCollaborator} disabled={addingCollaborator}>
+                    {addingCollaborator ? '添加中...' : '添加协作者'}
+                  </Button>
+                </div>
+              </div>
+
+              {collaborators.length > 0 ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {collaborators.map(collab => (
+                    <div key={collab.id} className="rounded-standard border border-border bg-parchment/60 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-inkwell">{collab.username}</div>
+                          <div className="mt-1 text-sm text-secondary">{collab.email}</div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-secondary">{collab.role}</div>
+                        </div>
+                        <Button variant="tertiary" size="sm" onClick={() => handleRemoveCollaborator(collab.id)}>
+                          移除
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-secondary">暂无协作者。比赛演示时可以用这一块证明作品支持多人参与和协作浏览。</p>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {showCleanConfirm && (
+          <div className="rounded-standard border border-amber-300 bg-amber-50 p-4">
+            <p className="text-sm text-body">
+              <strong>确认清理任务队列吗？</strong> 这会将所有未完成的任务标记为失败，但不会删除已经生成的章节内容。
+            </p>
+            <div className="mt-3 flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowCleanConfirm(false)} disabled={cleaningStuck}>
+                取消
+              </Button>
+              <Button variant="secondary" onClick={handleCleanStuckTasks} disabled={cleaningStuck}>
+                {cleaningStuck ? '清理中...' : '确认清理'}
+              </Button>
+            </div>
           </div>
         )}
-      </div>
 
-      {/* 确认清理对话框 */}
-      {showCleanConfirm && (
-        <div className="mt-4 bg-amber/5 border border-amber/30 rounded-standard p-4 space-y-3">
-          <p className="text-sm text-body">
-            <strong>确认清理任务队列吗？</strong> 这会将所有未完成的任务标记为失败，你可以重新尝试导出。<br />
-            不会删除已生成的章节内容，只清理任务状态。
-          </p>
-          <div className="flex gap-3 justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => setShowCleanConfirm(false)}
-              disabled={cleaningStuck}
-            >
-              取消
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleCleanStuckTasks}
-              disabled={cleaningStuck}
-            >
-              {cleaningStuck ? '清理中...' : '确认清理'}
+        {showResetConfirm && (
+          <div className="rounded-standard border border-red-300 bg-red-50 p-4">
+            <p className="text-sm text-body">
+              <strong>确认重置项目吗？</strong> 这会删除所有已生成章节和任务记录，项目将回到草稿状态。
+            </p>
+            <div className="mt-3 flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowResetConfirm(false)} disabled={resetting}>
+                取消
+              </Button>
+              <Button variant="secondary" onClick={handleResetProject} disabled={resetting}>
+                {resetting ? '重置中...' : '确认重置'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {data.status !== 'draft' && (
+          <div className="flex justify-end">
+            <Button variant="tertiary" onClick={handleResetProject}>
+              重置项目
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* 确认重置对话框 */}
-      {showResetConfirm && (
-        <div className="mt-4 bg-red/5 border border-red/30 rounded-standard p-4 space-y-3">
-          <p className="text-sm text-body">
-            <strong>确认重置项目吗？</strong> 这会删除所有已生成章节和任务记录，项目将回到草稿状态，此操作不可恢复。
-          </p>
-          <div className="flex gap-3 justify-end">
-            <Button
-              variant="secondary"
-              onClick={() => setShowResetConfirm(false)}
-              disabled={resetting}
-            >
-              取消
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleResetProject}
-              disabled={resetting}
-            >
-              {resetting ? '重置中...' : '确认重置'}
-            </Button>
-          </div>
-        </div>
-      )}
+        )}
       </div>
     </Layout>
   )

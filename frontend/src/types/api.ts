@@ -51,6 +51,67 @@ export interface Project {
   current_generation_task?: GenerationTask
 }
 
+export interface ArtifactSummary {
+  id: number
+  workflow_run_id?: number
+  chapter_id?: number
+  artifact_type: string
+  scope: string
+  chapter_index?: number
+  version_number: number
+  is_current: boolean
+  source: string
+  created_at: string
+}
+
+export interface ArtifactDetail extends ArtifactSummary {
+  content_text?: string | null
+  content_json?: JsonValue[] | { [key: string]: JsonValue } | null
+}
+
+export interface WorkflowStepRun {
+  id: number
+  step_key: string
+  step_type: string
+  status: string
+  attempt: number
+  chapter_index?: number
+  input_artifact_id?: number
+  output_artifact_id?: number
+  input_artifact?: ArtifactSummary
+  output_artifact?: ArtifactSummary
+  step_data?: Record<string, JsonValue>
+  started_at: string
+  completed_at?: string
+}
+
+export interface WorkflowFeedbackItem {
+  id: number
+  feedback_scope: string
+  feedback_type: string
+  action_type: string
+  chapter_index?: number
+  status: string
+  content: string
+  created_at: string
+}
+
+export interface WorkflowRun {
+  id: number
+  generation_task_id?: number
+  parent_run_id?: number
+  run_kind: string
+  trigger_source: string
+  status: string
+  current_step_key?: string
+  current_chapter?: number
+  run_metadata?: Record<string, JsonValue>
+  started_at: string
+  completed_at?: string
+  steps?: WorkflowStepRun[]
+  feedback_items?: WorkflowFeedbackItem[]
+}
+
 export interface Chapter {
   id: number
   project_id: number
@@ -76,6 +137,7 @@ export interface GenerationTask {
   error_message?: string
   started_at: string
   completed_at?: string
+  current_workflow_run?: WorkflowRun
 }
 
 export interface TaskStatus {
@@ -98,6 +160,16 @@ export interface QualityAnalytics {
   }>
   total_chapters: number
   passed_chapters: number
+}
+
+export interface WorkflowRunListResponse {
+  total: number
+  items: WorkflowRun[]
+}
+
+export interface ArtifactListResponse {
+  total: number
+  items: ArtifactDetail[]
 }
 
 export interface ProjectCreate {

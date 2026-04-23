@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEditor, EditorContent } from '@tiptap/react'
@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { Badge } from '../components/Badge'
 import { ProgressBar } from '../components/ProgressBar'
 import AgentCard from '../components/AgentCard'
 import {
@@ -24,6 +25,12 @@ import {
 import api from '../utils/api'
 import { useToast } from '../components/toastContext'
 import { getErrorMessage } from '../utils/errorMessage'
+import {
+  getChapterRunSummary,
+  getProjectStatusText,
+  getTaskStatusText,
+  getWorkflowAgentStatesFromRuntime,
+} from '../utils/workflow'
 
 // 精简架构：仅 4 个核心 Agent
 const agentNames = [
@@ -40,18 +47,14 @@ export const Editor: React.FC = () => {
   const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState('')
-  const [agentStates, setAgentStates] = useState<Record<string, 'idle' | 'running' | 'done' | 'error'>>({
-    planner: 'idle',
-    writer: 'idle',
-    critic: 'idle',
-    revise: 'idle',
-  })
   const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [versions, setVersions] = useState<ChapterVersionInfo[]>([])
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
   const [waitingConfirmChapter, setWaitingConfirmChapter] = useState<number | null>(null)
   const [planPreview, setPlanPreview] = useState<string>('')
+  const [liveTaskStatus, setLiveTaskStatus] = useState<string | null>(null)
+  const [liveCurrentChapter, setLiveCurrentChapter] = useState<number | null>(null)
 
   // 简单 markdown 渲染
   const renderMarkdown = (text: string) => {
@@ -117,12 +120,12 @@ export const Editor: React.FC = () => {
     return html;
   };
 
-  const { data: project } = useQuery({
+  const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
   })
 
-  const { data: chapter, isLoading } = useQuery({
+  const { data: chapter, isLoading, refetch: refetchChapter } = useQuery({
     queryKey: ['chapter', projectId, chapterIdx],
     queryFn: () => getChapter(projectId, chapterIdx),
     // 只有在以下情况才查询章节：
@@ -133,125 +136,58 @@ export const Editor: React.FC = () => {
     retry: false,
   })
 
-  // 根据当前进度和当前步骤更新 Agent 状态
-  const updateAgentStatesFromProgress = useCallback((progress: number, _currentChapter: number | null | undefined, currentStep: string = '') => {
-    setAgentStates(prevAgentStates => {
-      const newStates = { ...prevAgentStates }
-      // 重置所有状态为 idle
-      Object.keys(newStates).forEach(k => newStates[k as keyof typeof newStates] = 'idle')
-
-      // 1. 优先从 currentStep 文本判断当前 Agent（最准确）
-      // 精简架构顺序: Planner → Writer → Critic → Revise → Critic (复评)
-      const agentOrder = ['planner', 'writer', 'critic', 'revise'] as const
-      let currentAgent: (typeof agentOrder)[number] | null = null
-
-      if (currentStep.includes('策划') || currentStep.includes('Planner')) {
-        currentAgent = 'planner'
-      } else if (currentStep.includes('初稿') || currentStep.includes('生成') || currentStep.includes('Writer') || currentStep.includes('系统层防护')) {
-        currentAgent = 'writer'
-      } else if (currentStep.includes('评审') || currentStep.includes('Critic')) {
-        currentAgent = 'critic'
-      } else if (currentStep.includes('修订') || currentStep.includes('Revise')) {
-        currentAgent = 'revise'
-      }
-
-      if (currentAgent) {
-        // 找到了当前 Agent，按顺序设置状态
-        const currentIndex = agentOrder.indexOf(currentAgent)
-        agentOrder.forEach((name, index) => {
-          if (index < currentIndex) {
-            newStates[name] = 'done'
-          } else if (index === currentIndex) {
-            newStates[name] = 'running'
-          } else {
-            newStates[name] = 'idle'
-          }
-        })
-        return newStates
-      }
-
-      // 2. 兜底：如果 currentStep 无法判断，使用进度阈值判断
-      // 精简架构顺序: Planner → Writer → Critic → Revise
-      if (progress < 0.15) {
-        newStates.planner = 'running'
-      } else if (progress < 0.20) {
-        newStates.planner = 'done'
-        newStates.writer = 'running'
-      } else {
-        newStates.planner = 'done'
-        // 根据步骤描述判断当前哪个Agent在运行
-        if (currentStep.includes('初稿生成') || currentStep.includes('正在生成')) {
-          newStates.writer = 'running'
-        } else if (currentStep.includes('评审')) {
-          newStates.writer = 'done'
-          newStates.critic = 'running'
-        } else if (currentStep.includes('修订')) {
-          newStates.writer = 'done'
-          newStates.critic = 'done'
-          newStates.revise = 'running'
-        } else {
-          // 默认显示writer正在运行
-          newStates.writer = 'running'
-        }
-      }
-
-      return newStates
-    })
-  }, [])
-
   // 根据项目状态和章节状态初始化Agent状态
   // 如果项目已经完成生成，所有agent都应该显示为完成
   useEffect(() => {
     if (!project) return
 
-    if (project.status === 'completed') {
-      // 全部完成，所有agent都是done
+    const task = project.current_generation_task
+    const activeChapter = task?.current_workflow_run?.current_chapter ?? task?.current_chapter ?? null
+
+    if (task && (project.status === 'generating' || task.status === 'waiting_confirm')) {
       queueMicrotask(() => {
-        setAgentStates(prev => {
-          const newStates = { ...prev }
-          Object.keys(newStates).forEach(k => newStates[k as keyof typeof newStates] = 'done')
-          return newStates
-        })
+        setPollingTaskId(task.celery_task_id)
+        setProgress((task.progress || 0) * 100)
+        setCurrentStep(task.current_step || '')
+        setWaitingConfirmChapter(task.status === 'waiting_confirm' ? activeChapter : null)
+        setLiveTaskStatus(task.status)
+        setLiveCurrentChapter(activeChapter)
       })
-    } else if (project.status === 'generating') {
-      if (project.current_generation_task) {
-        const task = project.current_generation_task
-        queueMicrotask(() => {
-          setPollingTaskId(task.celery_task_id)
-          // 立即根据任务已有进度更新agent状态，不需要等第一次轮询
-          const progress = task.progress || 0
-          const currentStep = task.current_step || ''
-          const currentChapter = task.current_chapter ?? null
-          updateAgentStatesFromProgress(progress, currentChapter, currentStep)
-        })
-      } else if (!pollingTaskId && chapter && chapter.status === 'generated') {
-        // 项目还在生成中，但当前章节已经生成完毕，前面的agents都完成了
-        queueMicrotask(() => {
-          setAgentStates(prev => {
-            const newStates = { ...prev }
-            newStates.planner = 'done'
-            newStates.writer = 'done'
-            newStates.critic = 'done'
-            newStates.revise = 'done'
-            return newStates
-          })
-        })
-      } else if (!pollingTaskId) {
-        // 保险措施：项目状态是generating但没有找到current_generation_task，
-        // 重新查询项目数据确保我们没漏掉任务
-        queryClient.invalidateQueries({ queryKey: ['project', projectId] })
-      }
-    } else if (chapter && chapter.status === 'generated') {
-      // 其他情况（比如draft但已经生成），如果章节已经生成，所有agent完成
+    } else if (project.status !== 'generating') {
       queueMicrotask(() => {
-        setAgentStates(prev => {
-          const newStates = { ...prev }
-          Object.keys(newStates).forEach(k => newStates[k as keyof typeof newStates] = 'done')
-          return newStates
-        })
+        setPollingTaskId(null)
+        setLiveTaskStatus(task?.status ?? null)
+        setLiveCurrentChapter(activeChapter)
       })
     }
-  }, [project, projectId, pollingTaskId, queryClient, chapter, updateAgentStatesFromProgress])
+  }, [project])
+
+  const effectiveTaskStatus =
+    waitingConfirmChapter !== null
+      ? 'waiting_confirm'
+      : liveTaskStatus ?? project?.current_generation_task?.status ?? (pollingTaskId ? 'progress' : null)
+  const effectiveCurrentChapter =
+    liveCurrentChapter ??
+    waitingConfirmChapter ??
+    project?.current_generation_task?.current_workflow_run?.current_chapter ??
+    project?.current_generation_task?.current_chapter ??
+    null
+  const agentStates = useMemo(() => getWorkflowAgentStatesFromRuntime({
+    projectStatus: project?.status ?? (pollingTaskId ? 'generating' : undefined),
+    taskStatus: effectiveTaskStatus,
+    currentStep: currentStep || project?.current_generation_task?.current_step,
+    currentChapter: effectiveCurrentChapter,
+    progress: pollingTaskId ? progress / 100 : project?.current_generation_task?.progress,
+  }), [
+    currentStep,
+    effectiveCurrentChapter,
+    effectiveTaskStatus,
+    pollingTaskId,
+    progress,
+    project?.current_generation_task?.current_step,
+    project?.current_generation_task?.progress,
+    project?.status,
+  ])
 
   const updateMutation = useMutation({
     mutationFn: (content: string) => updateChapter(projectId, chapterIdx, { content }),
@@ -336,11 +272,10 @@ export const Editor: React.FC = () => {
       const res = await regenerateChapter(projectId, chapterIdx)
       setPollingTaskId(res.celery_task_id)
       setProgress(0)
-      // 更新 agent 状态
-      const newStates = { ...agentStates }
-      Object.keys(newStates).forEach(k => newStates[k as keyof typeof newStates] = 'idle')
-      newStates.writer = 'running'
-      setAgentStates(newStates)
+      setCurrentStep('重新生成已启动')
+      setWaitingConfirmChapter(null)
+      setLiveTaskStatus('progress')
+      setLiveCurrentChapter(chapterIdx)
       showToast('重新生成任务已提交', 'success')
     } catch (e: unknown) {
       showToast(getErrorMessage(e, '提交失败'), 'error')
@@ -357,20 +292,22 @@ export const Editor: React.FC = () => {
         const step = status.current_step || ''
         setProgress(status.progress * 100)
         setCurrentStep(step)
-        updateAgentStatesFromProgress(status.progress, status.current_chapter, step)
+        setLiveTaskStatus(status.db_status ?? null)
+        setLiveCurrentChapter(status.current_chapter ?? null)
 
         // 任务等待用户确认
         if (status.db_status === 'waiting_confirm') {
           clearInterval(interval)
           setWaitingConfirmChapter(status.current_chapter ?? null)
+          await refetchProject()
           // 如果是策划方案确认，加载预览
           if (status.current_chapter === 0) {
             try {
-              const res = await api.get(`/projects/${projectId}/plan-preview`);
-              setPlanPreview(res.data.preview);
+              const res = await api.get(`/projects/${projectId}/plan-preview`)
+              setPlanPreview(res.data.preview)
             } catch (e) {
               setPlanPreview('无法加载策划方案预览');
-              console.error('Failed to load plan preview', e);
+              console.error('Failed to load plan preview', e)
             }
           }
           setShowConfirmDialog(true)
@@ -379,13 +316,19 @@ export const Editor: React.FC = () => {
 
         if (status.celery_state === 'SUCCESS') {
           setPollingTaskId(null)
+          setProgress(100)
+          setCurrentStep('章节生成完成')
+          setLiveTaskStatus('success')
+          setLiveCurrentChapter(chapterIdx)
           showToast('章节生成完成', 'success')
-          queryClient.invalidateQueries({ queryKey: ['chapter', projectId, chapterIdx] })
-          queryClient.invalidateQueries({ queryKey: ['project', projectId] })
-          window.location.reload()
+          await queryClient.invalidateQueries({ queryKey: ['chapter', projectId, chapterIdx] })
+          await queryClient.invalidateQueries({ queryKey: ['project', projectId] })
+          await Promise.all([refetchChapter(), refetchProject()])
         }
         if (status.celery_state === 'FAILURE') {
           setPollingTaskId(null)
+          setLiveTaskStatus('failure')
+          setLiveCurrentChapter(status.current_chapter ?? null)
           showToast(status.error || '生成失败', 'error')
         }
       } catch (e) {
@@ -394,7 +337,7 @@ export const Editor: React.FC = () => {
     }, 2000)
 
     return () => clearInterval(interval)
-  }, [pollingTaskId, showToast, updateAgentStatesFromProgress, projectId, chapterIdx, queryClient])
+  }, [chapterIdx, pollingTaskId, projectId, queryClient, refetchChapter, refetchProject, showToast])
 
   // 加载版本列表
   const loadVersions = useCallback(async () => {
@@ -442,6 +385,12 @@ export const Editor: React.FC = () => {
       setWaitingConfirmChapter(null)
       setPollingTaskId(res.new_task_id)
       setFeedbackText('')
+      setPlanPreview('')
+      setProgress(0)
+      setCurrentStep(approved ? '确认已提交，继续生成' : '修改意见已提交，重新优化中')
+      setLiveTaskStatus('progress')
+      setLiveCurrentChapter(approved ? chapterIdx + 1 : chapterIdx)
+      await refetchProject()
     } catch (e: unknown) {
       showToast(getErrorMessage(e, '提交失败'), 'error')
     }
@@ -451,6 +400,34 @@ export const Editor: React.FC = () => {
   const wordCount = chapter?.content
     ? (chapter.content.match(/[\u4e00-\u9fff]/g) || []).length
     : 0
+  const activeChapterNumber =
+    waitingConfirmChapter ??
+    project?.current_generation_task?.current_workflow_run?.current_chapter ??
+    project?.current_generation_task?.current_chapter ??
+    chapterIdx
+  const runSummary = getChapterRunSummary({
+    projectStatus: project?.status,
+    taskStatus: effectiveTaskStatus,
+    currentStep: currentStep || project?.current_generation_task?.current_step,
+    currentChapter: activeChapterNumber,
+    progress: pollingTaskId ? progress / 100 : project?.current_generation_task?.progress,
+  }, chapterIdx)
+  const currentTaskLabel = effectiveTaskStatus
+    ? getTaskStatusText({
+        ...(project?.current_generation_task ?? {
+          id: 0,
+          project_id: projectId,
+          celery_task_id: pollingTaskId || '',
+          progress: progress / 100,
+          started_at: '',
+          status: effectiveTaskStatus,
+        }),
+        status: effectiveTaskStatus,
+      })
+    : '尚未启动'
+  const chapterPreviewHtml = chapter?.content
+    ? (chapter.content.includes('<') ? chapter.content : convertPlainTextToHtml(chapter.content))
+    : ''
 
   if (isLoading) {
     return (
@@ -462,14 +439,20 @@ export const Editor: React.FC = () => {
 
   return (
     <Layout>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-3xl">
             {chapter?.title || `第${chapterIdx}章`}
           </h1>
-          {project && <p className="text-secondary mt-2">{project.name}</p>}
+          {project && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p className="text-secondary">{project.name}</p>
+              <Badge variant="secondary">{getProjectStatusText(project.status)}</Badge>
+              <Badge variant={pollingTaskId ? 'status' : 'secondary'}>{currentTaskLabel}</Badge>
+            </div>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {project?.chapters && project.chapters.length > 1 && (
             <>
               <Link to={`/projects/${id}/write/${chapterIdx - 1}`}>
@@ -493,9 +476,71 @@ export const Editor: React.FC = () => {
         </div>
       </div>
 
-      {pollingTaskId && (
-        <div className="mb-6">
-          <ProgressBar progress={progress} message={currentStep || '生成中...'} />
+      <Card className="mb-6 border-sage/15 bg-[linear-gradient(135deg,rgba(91,127,110,0.1),rgba(255,255,255,0.88),rgba(250,247,242,0.96))]">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.22em] text-secondary">Chapter Workspace</p>
+            <h2 className="mt-2 text-2xl">{runSummary.headline}</h2>
+            <p className="mt-2 text-secondary">{runSummary.detail}</p>
+            <div className="mt-4 flex flex-wrap gap-3 text-sm text-secondary">
+              <span>当前章节：第 {activeChapterNumber} 章</span>
+              <span>字数：{wordCount}</span>
+              {project?.current_generation_task?.current_workflow_run?.current_step_key && (
+                <span>节点：{project.current_generation_task.current_workflow_run.current_step_key}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full max-w-xl space-y-3">
+            <ProgressBar
+              progress={pollingTaskId ? progress : 100}
+              message={
+                pollingTaskId
+                  ? currentStep || '工作流执行中...'
+                  : chapter
+                    ? '当前章节已可编辑'
+                    : '等待章节内容'
+              }
+            />
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+              <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                <p className="text-secondary">项目状态</p>
+                <p className="mt-1 text-body">{project ? getProjectStatusText(project.status) : '暂无'}</p>
+              </div>
+              <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                <p className="text-secondary">任务状态</p>
+                <p className="mt-1 text-body">{currentTaskLabel}</p>
+              </div>
+              <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                <p className="text-secondary">自动保存</p>
+                <p className="mt-1 text-body">{saving ? '进行中' : '已就绪'}</p>
+              </div>
+              <div className="rounded-standard border border-border bg-parchment/70 p-3">
+                <p className="text-secondary">版本历史</p>
+                <p className="mt-1 text-body">{versions.length > 0 ? `${versions.length} 条` : '可随时查看'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {waitingConfirmChapter !== null && !showConfirmDialog && (
+        <div className="mb-6 rounded-standard border border-terracotta/25 bg-terracotta/5 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-inkwell">
+                {waitingConfirmChapter === 0
+                  ? '策划方案正在等待你的确认'
+                  : `第 ${waitingConfirmChapter} 章正在等待你的确认`}
+              </p>
+              <p className="mt-1 text-sm text-secondary">
+                这是工作流暂停点。你可以继续查看内容，但只有确认后系统才会继续推进。
+              </p>
+            </div>
+            <Button variant="primary" onClick={() => setShowConfirmDialog(true)}>
+              打开确认面板
+            </Button>
+          </div>
         </div>
       )}
 
@@ -586,13 +631,8 @@ export const Editor: React.FC = () => {
 
       {/* 人工确认对话框 */}
       {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => {
-            // 点击背景关闭对话框
-            setShowConfirmDialog(false);
-          }}
-        >
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={event => event.stopPropagation()}>
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-xl font-medium">
                 {waitingConfirmChapter === 0
@@ -628,7 +668,7 @@ export const Editor: React.FC = () => {
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">章节预览：</label>
                 <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto"
-                  dangerouslySetInnerHTML={{ __html: chapter.content || '' }}
+                  dangerouslySetInnerHTML={{ __html: chapterPreviewHtml }}
                 />
               </div>
             )}

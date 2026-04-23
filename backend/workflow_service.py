@@ -561,6 +561,8 @@ def serialize_workflow_run(
 
     payload = {
         "id": workflow_run.id,
+        "generation_task_id": workflow_run.generation_task_id,
+        "parent_run_id": workflow_run.parent_run_id,
         "run_kind": workflow_run.run_kind,
         "trigger_source": workflow_run.trigger_source,
         "status": workflow_run.status,

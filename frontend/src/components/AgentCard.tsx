@@ -14,19 +14,19 @@ const statusText = {
   error: '失败',
 }
 
+const statusClasses = {
+  idle: 'bg-secondary/10 text-secondary',
+  running: 'bg-sage/10 text-sage',
+  done: 'bg-muted-gold/15 text-muted-gold',
+  error: 'bg-terracotta/10 text-terracotta',
+}
+
 export const AgentCard: React.FC<AgentCardProps> = ({
   name,
   status,
   output,
 }) => {
   const [expanded, setExpanded] = useState(false)
-
-  const statusColor = {
-    idle: 'muted',
-    running: 'sage',
-    done: 'muted-gold',
-    error: 'terracotta',
-  }
 
   return (
     <div
@@ -37,7 +37,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
     >
       <div className="flex items-center justify-between px-4 py-3">
         <Badge variant="agent">{name.toUpperCase()}</Badge>
-        <span className={`text-sm px-3 py-1 rounded-full bg-${statusColor[status]}/10 text-${statusColor[status]}`}>
+        <span className={`text-sm px-3 py-1 rounded-full ${statusClasses[status]}`}>
           {statusText[status]}
         </span>
         {output && (

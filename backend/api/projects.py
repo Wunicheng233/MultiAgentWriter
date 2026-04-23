@@ -15,7 +15,7 @@ from sqlalchemy import desc
 logger = logging.getLogger(__name__)
 
 from backend.database import get_db
-from backend.models import User, Project, Chapter, GenerationTask
+from backend.models import User, Project, Chapter, GenerationTask, WorkflowRun, Artifact
 from backend.task_dispatch import dispatch_tracked_task, make_task_id
 from backend.task_status import (
     active_project_tasks_query,
@@ -27,6 +27,10 @@ from backend.schemas import (
     ProjectUpdate,
     ProjectResponse,
     ProjectListResponse,
+    ArtifactListResponse,
+    ArtifactResponse,
+    WorkflowRunResponse,
+    WorkflowRunListResponse,
     ChapterSummary,
     GenerationTaskResponse,
     QualityAnalytics,
@@ -145,6 +149,202 @@ def get_project(
         result['current_generation_task'] = None
 
     return result
+
+
+@router.get(
+    "/{project_id}/workflow-runs",
+    response_model=WorkflowRunListResponse,
+    summary="获取项目工作流运行历史",
+)
+def list_workflow_runs(
+    project_id: int,
+    limit: int = Query(10, ge=1, le=50),
+    include_steps: bool = Query(True),
+    include_feedback_items: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回项目最近的 workflow runs，供前端展示运行历史和回放摘要。"""
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
+
+    query = db.query(WorkflowRun).filter(
+        WorkflowRun.project_id == project_id
+    ).order_by(
+        desc(WorkflowRun.started_at),
+        desc(WorkflowRun.id),
+    )
+    total = query.count()
+    workflow_runs = query.limit(limit).all()
+
+    return {
+        "total": total,
+        "items": [
+            serialize_workflow_run(
+                workflow_run,
+                include_steps=include_steps,
+                include_feedback_items=include_feedback_items,
+            )
+            for workflow_run in workflow_runs
+        ],
+    }
+
+
+@router.get(
+    "/{project_id}/artifacts",
+    response_model=ArtifactListResponse,
+    summary="获取项目 artifacts 列表",
+)
+def list_artifacts(
+    project_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    workflow_run_id: int | None = Query(None),
+    chapter_index: int | None = Query(None),
+    artifact_type: str | None = Query(None),
+    scope: str | None = Query(None),
+    current_only: bool = Query(False),
+    include_content: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回项目 artifacts，可按 run / chapter / type 过滤。"""
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
+
+    query = db.query(Artifact).filter(
+        Artifact.project_id == project_id
+    )
+    if workflow_run_id is not None:
+        query = query.filter(Artifact.workflow_run_id == workflow_run_id)
+    if chapter_index is not None:
+        query = query.filter(Artifact.chapter_index == chapter_index)
+    if artifact_type:
+        query = query.filter(Artifact.artifact_type == artifact_type)
+    if scope:
+        query = query.filter(Artifact.scope == scope)
+    if current_only:
+        query = query.filter(Artifact.is_current.is_(True))
+
+    query = query.order_by(desc(Artifact.created_at), desc(Artifact.id))
+    total = query.count()
+    artifacts = query.limit(limit).all()
+
+    def serialize_artifact(artifact: Artifact) -> dict:
+        payload = {
+            "id": artifact.id,
+            "workflow_run_id": artifact.workflow_run_id,
+            "chapter_id": artifact.chapter_id,
+            "artifact_type": artifact.artifact_type,
+            "scope": artifact.scope,
+            "chapter_index": artifact.chapter_index,
+            "version_number": artifact.version_number,
+            "is_current": artifact.is_current,
+            "source": artifact.source,
+            "created_at": artifact.created_at,
+        }
+        if include_content:
+            payload["content_text"] = artifact.content_text
+            payload["content_json"] = artifact.content_json
+        else:
+            payload["content_text"] = None
+            payload["content_json"] = None
+        return payload
+
+    return {
+        "total": total,
+        "items": [serialize_artifact(artifact) for artifact in artifacts],
+    }
+
+
+@router.get(
+    "/{project_id}/artifacts/{artifact_id}",
+    response_model=ArtifactResponse,
+    summary="获取单个 artifact 详情",
+)
+def get_artifact(
+    project_id: int,
+    artifact_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回单个 artifact 的完整内容。"""
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
+
+    artifact = db.query(Artifact).filter(
+        Artifact.project_id == project_id,
+        Artifact.id == artifact_id,
+    ).first()
+    if artifact is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact 不存在"
+        )
+
+    return {
+        "id": artifact.id,
+        "workflow_run_id": artifact.workflow_run_id,
+        "chapter_id": artifact.chapter_id,
+        "artifact_type": artifact.artifact_type,
+        "scope": artifact.scope,
+        "chapter_index": artifact.chapter_index,
+        "version_number": artifact.version_number,
+        "is_current": artifact.is_current,
+        "source": artifact.source,
+        "created_at": artifact.created_at,
+        "content_text": artifact.content_text,
+        "content_json": artifact.content_json,
+    }
+
+
+@router.get(
+    "/{project_id}/workflow-runs/{run_id}",
+    response_model=WorkflowRunResponse,
+    summary="获取单次工作流运行详情",
+)
+def get_workflow_run(
+    project_id: int,
+    run_id: int,
+    include_steps: bool = Query(True),
+    include_feedback_items: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回单次 workflow run 的完整详情，供运行回放与问题排查页面使用。"""
+    project = check_project_access(project_id, current_user, db, require_owner=False)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在"
+        )
+
+    workflow_run = db.query(WorkflowRun).filter(
+        WorkflowRun.project_id == project_id,
+        WorkflowRun.id == run_id,
+    ).first()
+    if workflow_run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="工作流运行不存在"
+        )
+
+    return serialize_workflow_run(
+        workflow_run,
+        include_steps=include_steps,
+        include_feedback_items=include_feedback_items,
+    )
 
 
 @router.put("/{project_id}", response_model=ProjectResponse, summary="更新项目")
