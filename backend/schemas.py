@@ -5,7 +5,7 @@ Pydantic 请求/响应模式
 
 from typing import Optional, List, Dict
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 
 # ========== User ==========
@@ -31,6 +31,14 @@ class UserResponse(UserBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("api_key", when_used="json")
+    def serialize_api_key(self, api_key: Optional[str]) -> Optional[str]:
+        if not api_key:
+            return None
+        if len(api_key) <= 8:
+            return api_key
+        return f"{api_key[:4]}...{api_key[-4:]}"
 
 
 class Token(BaseModel):

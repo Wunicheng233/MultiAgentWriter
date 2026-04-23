@@ -664,7 +664,7 @@ def create_share_link(
     db: Session = Depends(get_db)
 ):
     """创建只读分享链接，无需登录即可访问"""
-    project = check_project_access(project_id, current_user, db, require_owner=False)
+    project = check_project_access(project_id, current_user, db, require_owner=True)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

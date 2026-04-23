@@ -16,6 +16,7 @@ import core.orchestrator as orchestrator_module
 import utils.file_utils as file_utils
 import utils.volc_engine as volc_engine
 from backend.api.auth import clear_api_key, refresh_api_key, register
+from backend.auth import get_password_hash
 from backend.api.chapters import restore_version, update_chapter
 from backend.chapter_sync import html_content_to_plain_text
 from backend.database import Base, get_db
@@ -170,6 +171,34 @@ class ReviewFixRegressionTests(unittest.TestCase):
             self.assertIsNone(cleared_user.api_key)
         finally:
             db.close()
+
+    def test_user_response_masks_api_key_in_auth_payloads(self):
+        owner = self._create_user("masked_owner", "masked_owner@example.com")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == owner.id).one()
+            user.api_key = "abcd1234efgh5678"
+            user.hashed_password = get_password_hash("secret123")
+            db.commit()
+            db.refresh(user)
+            db.expunge(user)
+            refreshed_user = user
+        finally:
+            db.close()
+
+        self._set_current_user(refreshed_user)
+        me_response = self.client.get("/api/auth/me")
+        self.assertEqual(me_response.status_code, 200)
+        self.assertEqual(me_response.json()["api_key"], "abcd...5678")
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            json={"username": "masked_owner", "password": "secret123"},
+        )
+        self.assertEqual(login_response.status_code, 200)
+        self.assertEqual(login_response.json()["user"]["api_key"], "abcd...5678")
 
     def test_auth_dependency_does_not_log_raw_token_or_payload(self):
         owner = self._create_user("auth_log_owner", "auth_log_owner@example.com")
@@ -475,6 +504,26 @@ class ReviewFixRegressionTests(unittest.TestCase):
         editor_source = Path("/Users/nobody1/Desktop/project/writer/frontend/src/pages/Editor.tsx").read_text(encoding="utf-8")
         self.assertNotIn("/projects/${id}/edit/", editor_source)
         self.assertIn("/projects/${id}/write/", editor_source)
+
+    def test_collaborator_cannot_create_public_share_link(self):
+        owner = self._create_user("share_owner", "share_owner@example.com")
+        collaborator = self._create_user("share_collab", "share_collab@example.com")
+        project = self._create_project(owner, name="Shared Control Novel")
+
+        db = self.SessionLocal()
+        try:
+            db.add(ProjectCollaborator(project_id=project.id, user_id=collaborator.id, role="editor"))
+            db.commit()
+        finally:
+            db.close()
+
+        self._set_current_user(collaborator)
+        response = self.client.post(f"/api/projects/{project.id}/share")
+        self.assertEqual(response.status_code, 404)
+
+        self._set_current_user(owner)
+        response = self.client.post(f"/api/projects/{project.id}/share")
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":
