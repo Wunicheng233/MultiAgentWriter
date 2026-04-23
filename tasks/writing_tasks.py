@@ -18,7 +18,11 @@ from celery_app import celery_app
 from core.orchestrator import NovelOrchestrator, WaitingForConfirmationError
 from backend.database import SessionLocal
 from backend.models import GenerationTask, Project, User, Chapter
-from backend.workflow_service import materialize_open_feedback_files, update_workflow_run_status
+from backend.workflow_service import (
+    materialize_open_feedback_files,
+    reconcile_consumed_feedback_files,
+    update_workflow_run_status,
+)
 
 logger = get_task_logger(__name__)
 
@@ -48,6 +52,8 @@ def generate_novel_task(
 
     # 获取数据库会话，查找对应的GenerationTask记录
     db = SessionLocal()
+    materialized_feedback_files = []
+    applied_feedback_item_ids = []
     try:
         # 根据celery_task_id查找任务记录
         task_record = db.query(GenerationTask).filter(
@@ -310,9 +316,11 @@ def generate_novel_task(
                 # 保持现有 orchestrator 不变，同时降低对“先写文件”的强依赖。
                 materialized_feedback_files = materialize_open_feedback_files(db, project)
                 if materialized_feedback_files:
+                    created_feedback_files = [item for item in materialized_feedback_files if item.file_created]
                     logger.info(
-                        "Materialized %s feedback file(s) from structured feedback records",
+                        "Prepared %s open feedback target(s) for orchestration, created %s missing feedback file(s)",
                         len(materialized_feedback_files),
+                        len(created_feedback_files),
                     )
 
         # 获取用户 API Key
@@ -333,7 +341,16 @@ def generate_novel_task(
 
         # 执行完整生成流程，可能需要等待人工确认
         try:
-            result = orchestrator.run_full_novel()
+            try:
+                result = orchestrator.run_full_novel()
+            finally:
+                if materialized_feedback_files:
+                    applied_feedback_item_ids = reconcile_consumed_feedback_files(db, materialized_feedback_files)
+                    if applied_feedback_item_ids:
+                        logger.info(
+                            "Marked %s feedback item(s) as applied after orchestration consumed their bridge files",
+                            len(applied_feedback_item_ids),
+                        )
 
             # 更新任务状态为success
             if task_record is not None:
@@ -346,7 +363,10 @@ def generate_novel_task(
                     task_status="success",
                     current_step_key="completed",
                     current_chapter=task_record.current_chapter,
-                    metadata_updates={"completed": True},
+                    metadata_updates={
+                        "completed": True,
+                        "applied_feedback_item_ids": applied_feedback_item_ids,
+                    },
                 )
                 # 更新项目状态为completed
                 if task_record.project_id:
@@ -453,7 +473,10 @@ def generate_novel_task(
                     task_status="waiting_confirm",
                     current_step_key="waiting_confirm",
                     current_chapter=e.chapter_index,
-                    metadata_updates={"waiting_confirmation": True},
+                    metadata_updates={
+                        "waiting_confirmation": True,
+                        "applied_feedback_item_ids": applied_feedback_item_ids,
+                    },
                 )
                 db.commit()
                 logger.info(f"Updated task {task_record.id} status to waiting_confirm in database")

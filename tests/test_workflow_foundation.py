@@ -14,7 +14,7 @@ from backend.database import Base, get_db
 from backend.deps import get_current_user
 from backend.main import app
 from backend.models import Artifact, FeedbackItem, GenerationTask, Project, User, WorkflowRun, WorkflowStepRun
-from backend.workflow_service import create_generation_workflow_run, update_workflow_run_status
+from backend.workflow_service import create_feedback_item, create_generation_workflow_run, update_workflow_run_status
 
 
 class WorkflowFoundationTests(unittest.TestCase):
@@ -188,6 +188,50 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(feedback.chapter_index, 2)
             self.assertEqual(feedback.created_by_user_id, owner.id)
             self.assertIn("主角存在感太弱", feedback.content)
+        finally:
+            db.close()
+
+    def test_create_feedback_item_supersedes_previous_open_feedback_for_same_target(self):
+        owner = self._create_user("supersede_owner", "supersede_owner@example.com")
+        project = self._create_project(owner, name="Supersede Novel")
+
+        db = self.SessionLocal()
+        try:
+            first_feedback = create_feedback_item(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=None,
+                created_by_user_id=owner.id,
+                content="请增强第二章的冲突感。",
+                chapter_index=2,
+                feedback_scope="chapter",
+                feedback_type="user_rejection",
+                action_type="rewrite",
+            )
+            second_feedback = create_feedback_item(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=None,
+                created_by_user_id=owner.id,
+                content="请保留剧情但重写第二章文风。",
+                chapter_index=2,
+                feedback_scope="chapter",
+                feedback_type="user_rejection",
+                action_type="rewrite",
+            )
+            db.commit()
+            db.refresh(first_feedback)
+            db.refresh(second_feedback)
+
+            self.assertEqual(first_feedback.status, "ignored")
+            self.assertIsNotNone(first_feedback.resolved_at)
+            self.assertEqual(first_feedback.feedback_metadata["resolution_reason"], "superseded")
+            self.assertEqual(
+                first_feedback.feedback_metadata["superseded_by_feedback_item_id"],
+                second_feedback.id,
+            )
+            self.assertEqual(second_feedback.status, "open")
+            self.assertIsNone(second_feedback.resolved_at)
         finally:
             db.close()
 
@@ -653,6 +697,82 @@ class WorkflowFoundationTests(unittest.TestCase):
             feedback_file.read_text(encoding="utf-8"),
             "请重写第二章，并增强主角与反派的冲突。",
         )
+
+    def test_generate_task_marks_consumed_feedback_as_applied(self):
+        owner = self._create_user("applied_owner", "applied_owner@example.com")
+        project_dir = self.workspace / "applied-project"
+        project_dir.mkdir()
+        project = self._create_project(owner, name="Applied Novel", file_path=str(project_dir))
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-applied-1",
+                status="pending",
+                progress=0.0,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            feedback = create_feedback_item(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                created_by_user_id=owner.id,
+                content="请重写第二章，并加强结尾悬念。",
+                chapter_index=2,
+                feedback_scope="chapter",
+                feedback_type="user_rejection",
+                action_type="rewrite",
+            )
+            feedback_id = feedback.id
+            db.commit()
+        finally:
+            db.close()
+
+        class FakeOrchestrator:
+            def __init__(self, project_dir, progress_callback, user_api_key):
+                self.project_dir = Path(project_dir)
+
+            def run_full_novel(self):
+                feedback_file = self.project_dir / "feedback_2.txt"
+                assert feedback_file.exists(), "structured feedback bridge file should exist before orchestration"
+                feedback_file.unlink()
+                raise writing_tasks.WaitingForConfirmationError(2, "待确认")
+
+        original_session_local = writing_tasks.SessionLocal
+        original_orchestrator = writing_tasks.NovelOrchestrator
+        try:
+            writing_tasks.SessionLocal = self.SessionLocal
+            writing_tasks.NovelOrchestrator = FakeOrchestrator
+            writing_tasks.generate_novel_task.push_request(id="celery-applied-1", retries=0)
+            result = writing_tasks.generate_novel_task.run(project_dir=str(project_dir), user_id=str(owner.id))
+        finally:
+            writing_tasks.generate_novel_task.pop_request()
+            writing_tasks.SessionLocal = original_session_local
+            writing_tasks.NovelOrchestrator = original_orchestrator
+
+        self.assertTrue(result["waiting_confirmation"])
+
+        db = self.SessionLocal()
+        try:
+            db_feedback = db.query(FeedbackItem).filter(FeedbackItem.id == feedback_id).one()
+            db_task = db.query(GenerationTask).filter(GenerationTask.celery_task_id == "celery-applied-1").one()
+            db_run = db.query(WorkflowRun).filter(WorkflowRun.generation_task_id == db_task.id).one()
+
+            self.assertEqual(db_feedback.status, "applied")
+            self.assertIsNotNone(db_feedback.resolved_at)
+            self.assertEqual(db_run.status, "waiting_confirm")
+            self.assertEqual(db_run.run_metadata["applied_feedback_item_ids"], [feedback_id])
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

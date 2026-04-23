@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func
@@ -16,6 +17,16 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 
 from backend.models import Artifact, FeedbackItem, GenerationTask, Project, WorkflowRun, WorkflowStepRun
+
+
+@dataclass(frozen=True)
+class FeedbackFileMaterialization:
+    feedback_item_id: int
+    feedback_scope: str
+    chapter_index: int | None
+    content: str
+    path: Path
+    file_created: bool
 
 
 def _next_artifact_version(
@@ -194,6 +205,7 @@ def create_feedback_item(
     artifact_id: int | None = None,
     feedback_metadata: dict | None = None,
 ) -> FeedbackItem:
+    now = datetime.utcnow()
     feedback_item = FeedbackItem(
         project_id=project_id,
         workflow_run_id=workflow_run_id,
@@ -208,6 +220,28 @@ def create_feedback_item(
         feedback_metadata=feedback_metadata or {},
     )
     db.add(feedback_item)
+    db.flush()
+
+    superseded_items = db.query(FeedbackItem).filter(
+        FeedbackItem.project_id == project_id,
+        FeedbackItem.feedback_scope == feedback_scope,
+        FeedbackItem.chapter_index == chapter_index,
+        FeedbackItem.status == "open",
+        FeedbackItem.id != feedback_item.id,
+    ).all()
+
+    for item in superseded_items:
+        item.status = "ignored"
+        item.resolved_at = now
+        merged_metadata = dict(item.feedback_metadata or {})
+        merged_metadata.update(
+            {
+                "resolution_reason": "superseded",
+                "superseded_by_feedback_item_id": feedback_item.id,
+            }
+        )
+        item.feedback_metadata = merged_metadata
+
     db.flush()
     return feedback_item
 
@@ -328,7 +362,7 @@ def serialize_workflow_run(
 def materialize_open_feedback_files(
     db: Session,
     project: Project,
-) -> list[str]:
+) -> list[FeedbackFileMaterialization]:
     if not project.file_path:
         return []
 
@@ -338,10 +372,17 @@ def materialize_open_feedback_files(
     open_feedback_items = db.query(FeedbackItem).filter(
         FeedbackItem.project_id == project.id,
         FeedbackItem.status == "open",
-    ).order_by(FeedbackItem.id.asc()).all()
+    ).order_by(FeedbackItem.id.desc()).all()
 
-    materialized_files: list[str] = []
+    materialized_files: list[FeedbackFileMaterialization] = []
+    latest_feedback_by_target: dict[tuple[str, int | None], FeedbackItem] = {}
     for item in open_feedback_items:
+        target_key = (item.feedback_scope, item.chapter_index)
+        if target_key in latest_feedback_by_target:
+            continue
+        latest_feedback_by_target[target_key] = item
+
+    for item in latest_feedback_by_target.values():
         if item.chapter_index == 0 or item.feedback_scope == "plan":
             feedback_file = project_dir / "feedback_plan.txt"
         elif item.chapter_index is not None:
@@ -349,10 +390,50 @@ def materialize_open_feedback_files(
         else:
             continue
 
-        if feedback_file.exists():
-            continue
+        file_created = False
+        if not feedback_file.exists():
+            feedback_file.write_text(item.content, encoding="utf-8")
+            file_created = True
 
-        feedback_file.write_text(item.content, encoding="utf-8")
-        materialized_files.append(str(feedback_file))
+        materialized_files.append(
+            FeedbackFileMaterialization(
+                feedback_item_id=item.id,
+                feedback_scope=item.feedback_scope,
+                chapter_index=item.chapter_index,
+                content=item.content,
+                path=feedback_file,
+                file_created=file_created,
+            )
+        )
 
     return materialized_files
+
+
+def mark_feedback_item_applied(
+    db: Session,
+    feedback_item_id: int,
+) -> bool:
+    item = db.query(FeedbackItem).filter(
+        FeedbackItem.id == feedback_item_id,
+    ).first()
+    if item is None or item.status != "open":
+        return False
+
+    item.status = "applied"
+    item.resolved_at = datetime.utcnow()
+    db.flush()
+    return True
+
+
+def reconcile_consumed_feedback_files(
+    db: Session,
+    materialized_files: list[FeedbackFileMaterialization],
+) -> list[int]:
+    applied_item_ids: list[int] = []
+    for materialized in materialized_files:
+        if materialized.path.exists():
+            continue
+        if mark_feedback_item_applied(db, materialized.feedback_item_id):
+            applied_item_ids.append(materialized.feedback_item_id)
+
+    return applied_item_ids
