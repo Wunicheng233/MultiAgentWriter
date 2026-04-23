@@ -494,6 +494,22 @@ def update_workflow_run_status(
     return workflow_run
 
 
+def _serialize_artifact_summary(artifact: Artifact | None) -> dict | None:
+    if artifact is None:
+        return None
+
+    return {
+        "id": artifact.id,
+        "artifact_type": artifact.artifact_type,
+        "scope": artifact.scope,
+        "chapter_index": artifact.chapter_index,
+        "version_number": artifact.version_number,
+        "is_current": artifact.is_current,
+        "source": artifact.source,
+        "created_at": artifact.created_at,
+    }
+
+
 def serialize_workflow_run(
     workflow_run: WorkflowRun | None,
     include_steps: bool = False,
@@ -524,6 +540,10 @@ def serialize_workflow_run(
                 "status": step.status,
                 "attempt": step.attempt,
                 "chapter_index": step.chapter_index,
+                "input_artifact_id": step.input_artifact_id,
+                "output_artifact_id": step.output_artifact_id,
+                "input_artifact": _serialize_artifact_summary(step.input_artifact),
+                "output_artifact": _serialize_artifact_summary(step.output_artifact),
                 "step_data": step.step_data or {},
                 "started_at": step.started_at,
                 "completed_at": step.completed_at,

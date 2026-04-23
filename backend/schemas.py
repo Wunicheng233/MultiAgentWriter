@@ -41,6 +41,19 @@ class Token(BaseModel):
 
 # ========== Generation Task ==========
 
+class ArtifactSummaryResponse(BaseModel):
+    id: int
+    artifact_type: str
+    scope: str
+    chapter_index: Optional[int] = None
+    version_number: int
+    is_current: bool
+    source: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class WorkflowStepRunResponse(BaseModel):
     id: int
     step_key: str
@@ -48,6 +61,10 @@ class WorkflowStepRunResponse(BaseModel):
     status: str
     attempt: int
     chapter_index: Optional[int] = None
+    input_artifact_id: Optional[int] = None
+    output_artifact_id: Optional[int] = None
+    input_artifact: Optional[ArtifactSummaryResponse] = None
+    output_artifact: Optional[ArtifactSummaryResponse] = None
     step_data: Optional[Dict] = None
     started_at: datetime
     completed_at: Optional[datetime] = None

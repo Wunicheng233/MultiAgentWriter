@@ -835,6 +835,23 @@ class WorkflowFoundationTests(unittest.TestCase):
                 current_chapter=2,
                 metadata_updates={"last_message": "正在生成第 2 章..."},
             )
+            chapter_artifact = create_artifact(
+                db=db,
+                project_id=project.id,
+                workflow_run_id=run.id,
+                artifact_type="chapter_draft",
+                scope="chapter",
+                chapter_index=2,
+                source="agent",
+                content_text="第二章草稿",
+            )
+            chapter_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "generating_chapter",
+                WorkflowStepRun.chapter_index == 2,
+            ).one()
+            chapter_step.output_artifact_id = chapter_artifact.id
+            chapter_artifact_id = chapter_artifact.id
             update_workflow_run_status(
                 db=db,
                 generation_task=task,
@@ -882,6 +899,10 @@ class WorkflowFoundationTests(unittest.TestCase):
             [step["step_key"] for step in payload["workflow_run"]["steps"]],
             ["queued_generation", "generating_chapter", "waiting_confirm"],
         )
+        generating_step = payload["workflow_run"]["steps"][1]
+        self.assertEqual(generating_step["output_artifact_id"], chapter_artifact_id)
+        self.assertEqual(generating_step["output_artifact"]["artifact_type"], "chapter_draft")
+        self.assertEqual(generating_step["output_artifact"]["chapter_index"], 2)
         self.assertEqual(payload["workflow_run"]["feedback_items"][0]["content"], "请增强这一章的冲突感。")
 
     def test_project_detail_includes_current_generation_task_workflow_summary(self):
