@@ -30,12 +30,57 @@ class RuntimeContextIsolationTests(unittest.TestCase):
         self.assertEqual(vector_db._get_current_setting_collection_name(), "novel_world_setting_default")
 
         config.CURRENT_OUTPUT_DIR = self.workspace / "project-a"
-        self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-a")
-        self.assertEqual(vector_db._get_current_setting_collection_name(), "settings_project-a")
+        project_a_chapters = vector_db._get_current_chapter_collection_name()
+        project_a_settings = vector_db._get_current_setting_collection_name()
+        self.assertRegex(project_a_chapters, r"^chapters_project-a_[0-9a-f]{8}$")
+        self.assertRegex(project_a_settings, r"^settings_project-a_[0-9a-f]{8}$")
 
         config.CURRENT_OUTPUT_DIR = self.workspace / "project-b"
-        self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-b")
-        self.assertEqual(vector_db._get_current_setting_collection_name(), "settings_project-b")
+        self.assertRegex(vector_db._get_current_chapter_collection_name(), r"^chapters_project-b_[0-9a-f]{8}$")
+        self.assertRegex(vector_db._get_current_setting_collection_name(), r"^settings_project-b_[0-9a-f]{8}$")
+        self.assertNotEqual(project_a_chapters, vector_db._get_current_chapter_collection_name())
+        self.assertNotEqual(project_a_settings, vector_db._get_current_setting_collection_name())
+
+    def test_vector_collection_names_use_project_id_when_run_context_is_available(self):
+        run_context = RunContext(
+            project_id=11,
+            project_path=self.workspace / "renamed-project",
+            generation_task_id=22,
+            celery_task_id="celery-22",
+            workflow_run_id=33,
+            user_id=44,
+        )
+
+        with use_run_context(run_context):
+            self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project_11")
+            self.assertEqual(vector_db._get_current_setting_collection_name(), "settings_project_11")
+
+    def test_vector_collection_path_fallback_separates_same_basename_projects(self):
+        project_a = self.workspace / "author-a" / "draft"
+        project_b = self.workspace / "author-b" / "draft"
+        project_a.mkdir(parents=True)
+        project_b.mkdir(parents=True)
+
+        with use_output_dir(project_a):
+            project_a_collection = vector_db._get_current_chapter_collection_name()
+
+        with use_output_dir(project_b):
+            project_b_collection = vector_db._get_current_chapter_collection_name()
+
+        self.assertRegex(project_a_collection, r"^chapters_draft_[0-9a-f]{8}$")
+        self.assertRegex(project_b_collection, r"^chapters_draft_[0-9a-f]{8}$")
+        self.assertNotEqual(project_a_collection, project_b_collection)
+
+    def test_vector_collection_names_are_sanitized_and_length_limited(self):
+        long_project = self.workspace / ("中文 项目 " + "x" * 120)
+        with use_output_dir(long_project):
+            chapter_collection = vector_db._get_current_chapter_collection_name()
+            setting_collection = vector_db._get_current_setting_collection_name()
+
+        self.assertLessEqual(len(chapter_collection), vector_db.MAX_CHROMA_COLLECTION_NAME_LENGTH)
+        self.assertLessEqual(len(setting_collection), vector_db.MAX_CHROMA_COLLECTION_NAME_LENGTH)
+        self.assertRegex(chapter_collection, r"^[a-zA-Z0-9_-]+$")
+        self.assertRegex(setting_collection, r"^[a-zA-Z0-9_-]+$")
 
     def test_worldview_reset_uses_current_project_path_without_mutating_default_state(self):
         project_a = self.workspace / "project-a"
@@ -62,14 +107,14 @@ class RuntimeContextIsolationTests(unittest.TestCase):
         project_b = self.workspace / "project-b"
 
         set_current_output_dir(project_a)
-        self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-a")
+        self.assertRegex(vector_db._get_current_chapter_collection_name(), r"^chapters_project-a_[0-9a-f]{8}$")
 
         with use_output_dir(project_b):
             self.assertEqual(config.CURRENT_OUTPUT_DIR, project_b)
-            self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-b")
+            self.assertRegex(vector_db._get_current_chapter_collection_name(), r"^chapters_project-b_[0-9a-f]{8}$")
 
         self.assertEqual(config.CURRENT_OUTPUT_DIR, project_a)
-        self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-a")
+        self.assertRegex(vector_db._get_current_chapter_collection_name(), r"^chapters_project-a_[0-9a-f]{8}$")
 
     def test_run_context_tracks_structured_generation_metadata(self):
         project_a = self.workspace / "project-a"
@@ -87,7 +132,7 @@ class RuntimeContextIsolationTests(unittest.TestCase):
 
         with use_run_context(run_context):
             self.assertEqual(config.CURRENT_OUTPUT_DIR, project_b)
-            self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project-b")
+            self.assertEqual(vector_db._get_current_chapter_collection_name(), "chapters_project_11")
             current_context = get_current_run_context_optional()
             self.assertEqual(current_context.project_id, 11)
             self.assertEqual(current_context.generation_task_id, 22)

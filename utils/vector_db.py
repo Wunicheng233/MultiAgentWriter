@@ -4,10 +4,16 @@
 所有重量级导入延迟到第一次使用时才进行
 """
 
+import hashlib
+import re
 from pathlib import Path
 import config
 from utils.logger import logger
-from utils.runtime_context import get_current_output_dir, get_current_output_dir_optional
+from utils.runtime_context import (
+    get_current_output_dir,
+    get_current_output_dir_optional,
+    get_current_run_context_optional,
+)
 from typing import Optional, Any
 
 # ===================== 全局配置（只存配置，不初始化） =====================
@@ -63,21 +69,75 @@ def _get_embedding_func() -> Any:
 
 # ===================== 集合名称获取 =====================
 
-def _get_current_chapter_collection_name():
-    """获取当前小说专属的章节collection名称"""
+MAX_CHROMA_COLLECTION_NAME_LENGTH = 63
+
+
+def _sanitize_collection_component(value: str) -> str:
+    """Return a Chroma-safe collection name component."""
+    safe_value = re.sub(r"[^a-zA-Z0-9_-]+", "_", value).strip("_-").lower()
+    return safe_value or "unnamed"
+
+
+def _short_hash(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:8]
+
+
+def _namespace_from_output_dir(output_dir: Path) -> str:
+    """Build a stable path-based namespace for legacy/non-DB contexts."""
+    resolved = str(output_dir.expanduser().resolve())
+    slug = _sanitize_collection_component(output_dir.name)
+    return f"{slug}_{_short_hash(resolved)}"
+
+
+def _get_current_vector_namespace() -> str | None:
+    """
+    Return the namespace used to isolate project-scoped vector collections.
+
+    Production tasks should carry a RunContext with project_id, which is the
+    strongest stable identifier. Path hashing is a compatibility fallback for
+    CLI/local flows that do not have a database project yet.
+    """
+    run_context = get_current_run_context_optional()
+    if run_context and run_context.project_id is not None:
+        return f"project_{run_context.project_id}"
+
     current_output_dir = get_current_output_dir_optional()
     if current_output_dir is None:
-        return "novel_chapter_content_default"
-    # 用输出目录名作为collection名称，保证每本小说独立
-    return f"chapters_{current_output_dir.name}"
+        return None
+
+    return _namespace_from_output_dir(current_output_dir)
+
+
+def _build_collection_name(prefix: str, namespace: str | None, default_name: str) -> str:
+    if namespace is None:
+        return default_name
+
+    sanitized_namespace = _sanitize_collection_component(namespace)
+    max_namespace_length = MAX_CHROMA_COLLECTION_NAME_LENGTH - len(prefix) - 1
+    if len(sanitized_namespace) > max_namespace_length:
+        suffix = _short_hash(sanitized_namespace)
+        base_length = max_namespace_length - len(suffix) - 1
+        sanitized_namespace = f"{sanitized_namespace[:base_length].rstrip('_-')}_{suffix}"
+
+    return f"{prefix}_{sanitized_namespace}"
+
+
+def _get_current_chapter_collection_name():
+    """获取当前小说专属的章节collection名称"""
+    return _build_collection_name(
+        prefix="chapters",
+        namespace=_get_current_vector_namespace(),
+        default_name="novel_chapter_content_default",
+    )
 
 
 def _get_current_setting_collection_name():
     """获取当前小说专属的设定collection名称"""
-    current_output_dir = get_current_output_dir_optional()
-    if current_output_dir is None:
-        return "novel_world_setting_default"
-    return f"settings_{current_output_dir.name}"
+    return _build_collection_name(
+        prefix="settings",
+        namespace=_get_current_vector_namespace(),
+        default_name="novel_world_setting_default",
+    )
 
 
 def _get_reference_collection_name():
