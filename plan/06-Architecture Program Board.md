@@ -13,6 +13,7 @@
 - 当前仓库已经暴露出来的实现约束
 - 外部深度研究报告：
   - `/Users/nobody1/Downloads/deep-research-report.md`
+  - `/Users/nobody1/Downloads/deep-research-report (2).md`
 
 如果说 `04` 解释的是“长期应该往哪里演进”，`05` 解释的是“阶段上怎么推进”，那么这份文档回答的是一个更落地的问题：
 
@@ -63,6 +64,20 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 
 5. `文档与实现分叉`
    README、架构描述、plan 文档和真实运行路径之间，仍有历史演进造成的认知偏差。
+
+### 2.3 新调研报告后的路线校准
+
+`deep-research-report (2).md` 主要提出“女娲 skill / Hermes Agent / 作家风格注入”方向。结合当前仓库现状，决策如下：
+
+- 不改变当前主线依赖链：仍然先做 `状态收束 -> 上下文去全局化 -> Agent contract -> Harness`
+- 不在当前阶段引入 Hermes 作为外部常驻运行时，避免过早扩大部署、权限和状态同步复杂度
+- 吸收女娲 skill 的方法论，但把它内化为 StoryForge 自己的 `Style Runtime`
+- 将风格能力定位为中期差异化能力，而不是短期替代 workflow / artifact / harness 的新主线
+- 风格相关功能必须同时包含治理机制：公共领域优先、透明披露、近重复检测、风格审计、导出标识
+
+因此，新的路线不是“转向 Hermes 化”，而是：
+
+`先把创作内核做稳 -> 再把风格变成可控工件 -> 最后再评估外部 Agent 运行时是否值得接入`
 
 ---
 
@@ -140,6 +155,7 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 | feedback 不是一等对象 | 当前仍保留较重的文件兼容逻辑 | 人工协作、社区评论反哺、反馈分析都无法成立 | P0 | Wave A |
 | harness 空白 | 调优主要依赖主观判断 | 优化方向无法证伪，越做越重也未必更好 | P1 | Wave C |
 | agent 契约弱 | 很多节点仍依赖文本约定与隐式上下文 | 换模型、换 prompt、插新节点时稳定性下降 | P1 | Wave B / Wave C |
+| 风格治理缺位 | 目前只有普通“风格偏好”，没有结构化 StyleProfile、披露和近重复风险控制 | 后续做作家风格或社区发布时，容易产生版权、误导和质量不可控问题 | P1 | Wave C / Wave D |
 | 文档分叉 | README、plan、代码现实存在偏差 | 新人接手成本高，外部沟通与内部判断失真 | P1 | Wave A |
 | 安全边界薄弱 | 密钥、认证日志、分享权限等存在历史设计债务 | 线上事故与合规风险 | P1 | Wave A |
 | 测试断层 | 核心链路回归还不够系统化 | 每一轮重构都在重复踩坑 | P1 | Wave A / Wave C |
@@ -247,6 +263,10 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
   - user rejection rate
 - 建立 artifact 与评分的可追踪关系
 - 让 prompt / workflow / model 变更具备最小 A/B 比较能力
+- 为后续 Style Runtime 预留评测维度：
+  - style adherence
+  - originality / copy risk
+  - disclosure compliance
 
 这一波的成功标准：
 
@@ -280,6 +300,10 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
   - 设定圣经
   - 伏笔清单
 - 让用户反馈、系统评审、未来评论输入都能汇入统一反馈模型
+- 试点 `StyleProfile`：
+  - 项目级风格偏好结构化
+  - Writer / Revise / Critic 的不同风格职责
+  - 风格审计结果作为 artifact 或 evaluation report 保存
 
 这一波的成功标准：
 
@@ -294,9 +318,9 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 
 ---
 
-## 6. 四条主施工线
+## 6. 五条主施工线
 
-为了避免“表面上按阶段推进，实际上所有事情还是糊在一起”，后续具体工作要被组织为四条主施工线。
+为了避免“表面上按阶段推进，实际上所有事情还是糊在一起”，后续具体工作要被组织为五条主施工线。
 
 ### 6.1 Workflow 线
 
@@ -367,11 +391,30 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 - failure taxonomy
 - step metrics dashboard
 
+### 6.5 Style Runtime & Governance 线
+
+负责回答：
+
+- 用户选择的风格到底是什么结构化对象
+- 风格依据来自哪里，是否允许用于产品
+- 不同 Agent 应该以多强的风格强度工作
+- 输出是否过度贴近参考文本
+- 导出和发布时是否完成 AI 生成与风格启发披露
+
+长期产物：
+
+- `StyleProfile`
+- `StyleEvidenceBundle`
+- `StyleRenderContext`
+- `StyleAuditResult`
+- copy risk detector
+- disclosure policy
+
 ---
 
-## 7. 下一阶段最值得真的开工的 12 个主题
+## 7. 下一阶段最值得真的开工的 14 个主题
 
-这 12 个主题不是一次全做，而是接下来连续几个迭代最值得推进的技术主题池。
+这 14 个主题不是一次全做，而是接下来连续几个迭代最值得推进的技术主题池。
 
 ### 7.1 Wave A 主题池
 
@@ -417,6 +460,12 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 12. `结构化记忆面板`
    让人物、时间线、设定、伏笔从隐式文本变成系统可读对象。
 
+13. `StyleProfile v0`
+   把项目级风格偏好从自然语言字段升级成结构化对象，先支持抽象风格标签，再支持历史作者风格包。
+
+14. `风格风险治理`
+   在 harness 和导出链路里加入近重复检测、披露模板、公共领域/授权状态记录。
+
 ---
 
 ## 8. 顺序依赖
@@ -425,7 +474,7 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 
 后续必须遵守下面这条依赖链：
 
-`状态收束 -> 上下文去全局化 -> Agent contract -> Harness -> Workspace / Branching -> 社区生态`
+`状态收束 -> 上下文去全局化 -> Agent contract -> Harness -> Style Runtime -> Workspace / Branching -> 社区生态`
 
 这条依赖的意义很大：
 
@@ -433,6 +482,7 @@ StoryForge AI 当前不是一个成熟的“多智能体协作平台”，而是
 - 如果上下文还是全局的，就不要急着提并发和多 worker
 - 如果 Agent contract 还没稳定，就不要急着横向加很多专用 Agent
 - 如果 harness 还没有，就不要过度相信 prompt 调优结果
+- 如果风格治理还没有，就不要公开做“某作家本人风格”式营销
 - 如果 workspace 还不稳，就不要急着做社区反哺创作
 
 ---
