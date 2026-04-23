@@ -1,6 +1,6 @@
+import copy
 import json
-from pathlib import Path
-from config import CURRENT_OUTPUT_DIR
+import config
 from utils.logger import logger
 
 # ===================== 世界观管控核心类 =====================
@@ -42,13 +42,13 @@ class WorldviewManager:
 
     def _update_file_path(self):
         """更新文件路径到当前小说输出目录"""
-        if CURRENT_OUTPUT_DIR is None:
+        current_output_dir = config.CURRENT_OUTPUT_DIR
+        if current_output_dir is None:
             # 还没设置输出目录，先存在core临时位置
-            from config import ROOT_DIR
-            self.file_path = ROOT_DIR / "core" / "worldview_state.json"
+            self.file_path = config.ROOT_DIR / "core" / "worldview_state.json"
         else:
             # 每本小说独立存储
-            self.file_path = CURRENT_OUTPUT_DIR / "worldview_state.json"
+            self.file_path = current_output_dir / "worldview_state.json"
 
     # ===================== 基础读写方法 =====================
     def _load_state(self) -> dict:
@@ -56,8 +56,9 @@ class WorldviewManager:
         self._update_file_path()
         if not self.file_path.exists():
             logger.info("⚠️ 未找到世界观状态文件，初始化全新世界观")
-            self._save_state(self.default_state)
-            return self.default_state
+            initial_state = copy.deepcopy(self.default_state)
+            self._save_state(initial_state)
+            return initial_state
 
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
@@ -66,20 +67,20 @@ class WorldviewManager:
             return state
         except json.JSONDecodeError as e:
             logger.error(f"❌ 世界观状态JSON解析失败，使用默认值：{str(e)}")
-            return self.default_state
+            return copy.deepcopy(self.default_state)
         except OSError as e:
             logger.error(f"❌ 世界观状态文件读取失败，使用默认值：{str(e)}")
-            return self.default_state
+            return copy.deepcopy(self.default_state)
         except Exception as e:
             logger.error(f"❌ 世界观状态加载失败，使用默认值：{str(e)}")
-            return self.default_state
+            return copy.deepcopy(self.default_state)
 
     def _save_state(self, state: dict):
         """把世界观状态保存到本地JSON文件，持久化存储"""
         try:
             self._update_file_path()
             # 确保文件夹存在
-            self.file_path.parent.mkdir(exist_ok=True)
+            self.file_path.parent.mkdir(exist_ok=True, parents=True)
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=4)
         except Exception as e:
@@ -90,7 +91,7 @@ class WorldviewManager:
         """重置世界观，用于新建小说项目"""
         logger.info("🔄 正在重置世界观（新建小说）")
         self._update_file_path()  # 重置时更新路径到当前小说输出目录
-        self.state = self.default_state
+        self.state = copy.deepcopy(self.default_state)
         self._save_state(self.state)
         logger.info("✅ 世界观重置完成")
         logger.info(f"📁 世界观状态存储位置：{self.file_path}")

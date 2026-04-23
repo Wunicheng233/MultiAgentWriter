@@ -5,14 +5,14 @@
 """
 
 from pathlib import Path
-from config import ROOT_DIR, CURRENT_OUTPUT_DIR
+import config
 from utils.logger import logger
 from typing import Optional, Any
 
 # ===================== 全局配置（只存配置，不初始化） =====================
 # 向量库持久化路径
-CHROMA_DB_PATH = ROOT_DIR / "vector_db"
-CHROMA_DB_PATH.mkdir(exist_ok=True)
+CHROMA_DB_PATH = config.ROOT_DIR / "vector_db"
+CHROMA_DB_PATH.mkdir(exist_ok=True, parents=True)
 
 # 嵌入模型配置
 DEFAULT_EMBEDDING_MODEL = "uer/sbert-base-chinese-nli"
@@ -64,17 +64,19 @@ def _get_embedding_func() -> Any:
 
 def _get_current_chapter_collection_name():
     """获取当前小说专属的章节collection名称"""
-    if CURRENT_OUTPUT_DIR is None:
+    current_output_dir = config.CURRENT_OUTPUT_DIR
+    if current_output_dir is None:
         return "novel_chapter_content_default"
     # 用输出目录名作为collection名称，保证每本小说独立
-    return f"chapters_{CURRENT_OUTPUT_DIR.name}"
+    return f"chapters_{current_output_dir.name}"
 
 
 def _get_current_setting_collection_name():
     """获取当前小说专属的设定collection名称"""
-    if CURRENT_OUTPUT_DIR is None:
+    current_output_dir = config.CURRENT_OUTPUT_DIR
+    if current_output_dir is None:
         return "novel_world_setting_default"
-    return f"settings_{CURRENT_OUTPUT_DIR.name}"
+    return f"settings_{current_output_dir.name}"
 
 
 def _get_reference_collection_name():
@@ -95,20 +97,22 @@ def get_reference_collection():
 def get_chapter_collection():
     client = _get_client()
     embed = _get_embedding_func()
+    current_output_dir = config.CURRENT_OUTPUT_DIR
     return client.get_or_create_collection(
         name=_get_current_chapter_collection_name(),
         embedding_function=embed,
-        metadata={"description": f"章节内容 - {CURRENT_OUTPUT_DIR.name if CURRENT_OUTPUT_DIR else 'default'}"}
+        metadata={"description": f"章节内容 - {current_output_dir.name if current_output_dir else 'default'}"}
     )
 
 
 def get_setting_collection():
     client = _get_client()
     embed = _get_embedding_func()
+    current_output_dir = config.CURRENT_OUTPUT_DIR
     return client.get_or_create_collection(
         name=_get_current_setting_collection_name(),
         embedding_function=embed,
-        metadata={"description": f"核心设定 - {CURRENT_OUTPUT_DIR.name if CURRENT_OUTPUT_DIR else 'default'}"}
+        metadata={"description": f"核心设定 - {current_output_dir.name if current_output_dir else 'default'}"}
     )
 
 
