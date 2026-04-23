@@ -9,7 +9,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import backend.api.projects as projects_api
+import backend.api.chapters as chapters_api
 import backend.api.tasks as tasks_api
+import tasks.export_tasks as export_tasks
 import tasks.writing_tasks as writing_tasks
 from utils.runtime_context import get_current_output_dir_optional, get_current_run_context_optional, set_current_output_dir
 from backend.database import Base, get_db
@@ -106,14 +108,28 @@ class WorkflowFoundationTests(unittest.TestCase):
         project = self._create_project(owner, name="Workflow Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
-        original_delay = projects_api.generate_novel_task.delay
+        dispatched_task_ids = []
+        original_apply_async = projects_api.generate_novel_task.apply_async
         try:
-            projects_api.generate_novel_task.delay = lambda project_dir, user_id: SimpleNamespace(id="celery-workflow-1")
+            def fake_apply_async(args=None, task_id=None, **kwargs):
+                db = self.SessionLocal()
+                try:
+                    persisted_task = db.query(GenerationTask).filter(
+                        GenerationTask.celery_task_id == task_id
+                    ).one_or_none()
+                    self.assertIsNotNone(persisted_task)
+                    dispatched_task_ids.append(task_id)
+                    return SimpleNamespace(id=task_id)
+                finally:
+                    db.close()
+
+            projects_api.generate_novel_task.apply_async = fake_apply_async
             response = self.client.post(f"/api/projects/{project.id}/generate")
         finally:
-            projects_api.generate_novel_task.delay = original_delay
+            projects_api.generate_novel_task.apply_async = original_apply_async
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(dispatched_task_ids), 1)
 
         db = self.SessionLocal()
         try:
@@ -283,17 +299,31 @@ class WorkflowFoundationTests(unittest.TestCase):
         finally:
             db.close()
 
-        original_delay = tasks_api.generate_novel_task.delay
+        dispatched_task_ids = []
+        original_apply_async = tasks_api.generate_novel_task.apply_async
         try:
-            tasks_api.generate_novel_task.delay = lambda project_dir, user_id: SimpleNamespace(id="celery-feedback-2")
+            def fake_apply_async(args=None, task_id=None, **kwargs):
+                db = self.SessionLocal()
+                try:
+                    persisted_task = db.query(GenerationTask).filter(
+                        GenerationTask.celery_task_id == task_id
+                    ).one_or_none()
+                    self.assertIsNotNone(persisted_task)
+                    dispatched_task_ids.append(task_id)
+                    return SimpleNamespace(id=task_id)
+                finally:
+                    db.close()
+
+            tasks_api.generate_novel_task.apply_async = fake_apply_async
             response = self.client.post(
                 "/api/tasks/celery-feedback-1/confirm",
                 json={"approved": False, "feedback": "这一章主角存在感太弱，重写并增强冲突。"},
             )
         finally:
-            tasks_api.generate_novel_task.delay = original_delay
+            tasks_api.generate_novel_task.apply_async = original_apply_async
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(dispatched_task_ids), 1)
 
         db = self.SessionLocal()
         try:
@@ -805,6 +835,52 @@ class WorkflowFoundationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("已有运行中的任务", response.json()["detail"])
 
+    def test_trigger_export_persists_task_before_dispatch(self):
+        owner = self._create_user("export_dispatch_owner", "export_dispatch_owner@example.com")
+        project_dir = self.workspace / "export-dispatch-project"
+        project_dir.mkdir()
+        project = self._create_project(owner, name="Export Dispatch Novel", file_path=str(project_dir))
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            db.add(
+                Chapter(
+                    project_id=project.id,
+                    chapter_index=1,
+                    title="第1章",
+                    content="<p>章节内容</p>",
+                    word_count=4,
+                    status="generated",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        dispatched_task_ids = []
+        original_apply_async = export_tasks.export_project_task.apply_async
+        try:
+            def fake_apply_async(args=None, task_id=None, **kwargs):
+                db = self.SessionLocal()
+                try:
+                    persisted_task = db.query(GenerationTask).filter(
+                        GenerationTask.celery_task_id == task_id
+                    ).one_or_none()
+                    self.assertIsNotNone(persisted_task)
+                    dispatched_task_ids.append(task_id)
+                    return SimpleNamespace(id=task_id)
+                finally:
+                    db.close()
+
+            export_tasks.export_project_task.apply_async = fake_apply_async
+            response = self.client.post(f"/api/projects/{project.id}/export?format=html")
+        finally:
+            export_tasks.export_project_task.apply_async = original_apply_async
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(dispatched_task_ids), 1)
+
     def test_regenerate_chapter_blocks_when_waiting_confirm_task_exists(self):
         owner = self._create_user("active_regen_owner", "active_regen_owner@example.com")
         project_dir = self.workspace / "active-regen-project"
@@ -840,6 +916,52 @@ class WorkflowFoundationTests(unittest.TestCase):
         response = self.client.post(f"/api/projects/{project.id}/chapters/1/regenerate")
         self.assertEqual(response.status_code, 400)
         self.assertIn("已有运行中的任务", response.json()["detail"])
+
+    def test_regenerate_chapter_persists_task_before_dispatch(self):
+        owner = self._create_user("regen_dispatch_owner", "regen_dispatch_owner@example.com")
+        project_dir = self.workspace / "regen-dispatch-project"
+        project_dir.mkdir()
+        project = self._create_project(owner, name="Regen Dispatch Novel", file_path=str(project_dir))
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            db.add(
+                Chapter(
+                    project_id=project.id,
+                    chapter_index=1,
+                    title="第1章",
+                    content="<p>章节内容</p>",
+                    word_count=4,
+                    status="generated",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        dispatched_task_ids = []
+        original_apply_async = chapters_api.generate_novel_task.apply_async
+        try:
+            def fake_apply_async(args=None, task_id=None, **kwargs):
+                db = self.SessionLocal()
+                try:
+                    persisted_task = db.query(GenerationTask).filter(
+                        GenerationTask.celery_task_id == task_id
+                    ).one_or_none()
+                    self.assertIsNotNone(persisted_task)
+                    dispatched_task_ids.append(task_id)
+                    return SimpleNamespace(id=task_id)
+                finally:
+                    db.close()
+
+            chapters_api.generate_novel_task.apply_async = fake_apply_async
+            response = self.client.post(f"/api/projects/{project.id}/chapters/1/regenerate")
+        finally:
+            chapters_api.generate_novel_task.apply_async = original_apply_async
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(dispatched_task_ids), 1)
 
     def test_task_status_endpoint_includes_workflow_run_steps_and_feedback(self):
         owner = self._create_user("status_api_owner", "status_api_owner@example.com")

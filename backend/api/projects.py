@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 from backend.database import get_db
 from backend.models import User, Project, Chapter, GenerationTask
+from backend.task_dispatch import dispatch_tracked_task, make_task_id
 from backend.task_status import ACTIVE_TASK_STATUSES
 from backend.schemas import (
     ProjectCreate,
@@ -338,14 +339,13 @@ def trigger_generation(
                 logger.warning(f"Failed to clear existing chapters for regenerate: {e}")
         db.commit()
 
-    # 提交Celery任务
     project_dir = project.file_path
-    celery_task = generate_novel_task.delay(project_dir, str(current_user.id))
+    celery_task_id = make_task_id("generate")
 
     # 创建任务记录
     task = GenerationTask(
         project_id=project.id,
-        celery_task_id=celery_task.id,
+        celery_task_id=celery_task_id,
         status="pending",
         progress=0.0,
     )
@@ -363,6 +363,14 @@ def trigger_generation(
     project.status = "generating"
     db.commit()
     db.refresh(task)
+
+    dispatch_tracked_task(
+        db=db,
+        task=task,
+        celery_task=generate_novel_task,
+        args=(project_dir, str(current_user.id)),
+        project=project,
+    )
 
     return task
 
@@ -451,12 +459,12 @@ def trigger_export(
 
     # 导入导出任务
     from tasks.export_tasks import export_project_task
-    celery_task = export_project_task.delay(project_id, format)
+    celery_task_id = make_task_id("export")
 
     # 创建任务记录
     task = GenerationTask(
         project_id=project.id,
-        celery_task_id=celery_task.id,
+        celery_task_id=celery_task_id,
         status="pending",
         progress=0.0,
         current_step=f"准备导出 {format}...",
@@ -464,6 +472,14 @@ def trigger_export(
     db.add(task)
     db.commit()
     db.refresh(task)
+
+    dispatch_tracked_task(
+        db=db,
+        task=task,
+        celery_task=export_project_task,
+        args=(project_id, format),
+        project=None,
+    )
 
     return task
 

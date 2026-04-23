@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from backend.database import get_db
 from backend.models import User, GenerationTask, Project, Chapter
 from backend.schemas import GenerationTaskResponse
+from backend.task_dispatch import dispatch_tracked_task, make_task_id
 from backend.deps import get_current_user
 from backend.workflow_service import (
     create_feedback_item,
@@ -104,14 +105,12 @@ def confirm_chapter(
             with open(feedback_file, "w", encoding="utf-8") as f:
                 f.write(request.feedback)
 
-    # 重新启动任务继续生成
-    # Celery会分配一个新的worker进程继续
-    new_task = generate_novel_task.delay(project.file_path, str(current_user.id))
+    new_task_id = make_task_id("continue")
 
     # 创建新的任务记录
     new_task_record = GenerationTask(
         project_id=project.id,
-        celery_task_id=new_task.id,
+        celery_task_id=new_task_id,
         status="pending",
         progress=task_record.progress,
         current_chapter=chapter_index if not request.approved else chapter_index + 1,
@@ -146,18 +145,25 @@ def confirm_chapter(
         metadata_updates={
             "review_decision": review_outcome,
             "review_feedback": request.feedback.strip() or None,
-            "continued_with_task_id": new_task.id,
+            "continued_with_task_id": new_task_id,
         },
     )
-    db.commit()
 
     # 更新原项目状态
     project.status = "generating"
     db.commit()
 
+    dispatch_tracked_task(
+        db=db,
+        task=new_task_record,
+        celery_task=generate_novel_task,
+        args=(project.file_path, str(current_user.id)),
+        project=project,
+    )
+
     return {
         "success": True,
-        "new_task_id": new_task.id,
+        "new_task_id": new_task_id,
         "message": "已提交确认，任务继续"
     }
 

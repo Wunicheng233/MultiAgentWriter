@@ -13,6 +13,7 @@ from sqlalchemy import desc
 from backend.chapter_sync import html_content_to_plain_text, render_chapter_plain_text
 from backend.database import get_db
 from backend.models import User, Project, Chapter, GenerationTask, ChapterVersion
+from backend.task_dispatch import dispatch_tracked_task, make_task_id
 from backend.task_status import ACTIVE_TASK_STATUSES
 from backend.schemas import ChapterResponse, ChapterUpdate, GenerationTaskResponse
 from backend.deps import get_current_user
@@ -203,15 +204,13 @@ def regenerate_chapter(
             detail=f"已有运行中的任务 (task_id={running_task.celery_task_id})"
         )
 
-    # 提交Celery任务
-    # TODO: 后续支持只生成单章，目前完整生成
     project_dir = project.file_path
-    celery_task = generate_novel_task.delay(project_dir, str(current_user.id))
+    celery_task_id = make_task_id("regenerate")
 
     # 创建任务记录
     task = GenerationTask(
         project_id=project.id,
-        celery_task_id=celery_task.id,
+        celery_task_id=celery_task_id,
         status="pending",
         progress=0.0,
         current_chapter=chapter_index,
@@ -220,6 +219,15 @@ def regenerate_chapter(
     project.status = "generating"
     db.commit()
     db.refresh(task)
+
+    # TODO: 后续支持只生成单章，目前完整生成
+    dispatch_tracked_task(
+        db=db,
+        task=task,
+        celery_task=generate_novel_task,
+        args=(project_dir, str(current_user.id)),
+        project=project,
+    )
 
     return task
 
