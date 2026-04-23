@@ -997,6 +997,139 @@ class WorkflowFoundationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(dispatched_task_ids), 1)
 
+    def test_clean_stuck_tasks_marks_task_and_workflow_failed(self):
+        owner = self._create_user("clean_stuck_owner", "clean_stuck_owner@example.com")
+        project = self._create_project(owner, name="Clean Stuck Novel")
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-clean-stuck-1",
+                status="progress",
+                progress=0.4,
+                current_chapter=2,
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)
+            run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=task,
+                task_status="progress",
+                current_step_key="generating_chapter",
+                current_chapter=2,
+            )
+            run_id = run.id
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(f"/api/projects/{project.id}/clean-stuck-tasks")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["cleaned_count"], 1)
+
+        db = self.SessionLocal()
+        try:
+            task = db.query(GenerationTask).filter(GenerationTask.celery_task_id == "celery-clean-stuck-1").one()
+            run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).one()
+            failed_step = db.query(WorkflowStepRun).filter(
+                WorkflowStepRun.workflow_run_id == run.id,
+                WorkflowStepRun.step_key == "failed",
+            ).one()
+
+            self.assertEqual(task.status, "failure")
+            self.assertEqual(task.error_message, "User manually cleaned up stuck task")
+            self.assertIsNotNone(task.completed_at)
+            self.assertEqual(run.status, "failed")
+            self.assertEqual(run.current_step_key, "failed")
+            self.assertEqual(run.run_metadata["failed_by"], "manual_cleanup")
+            self.assertIsNotNone(run.completed_at)
+            self.assertEqual(failed_step.status, "failed")
+        finally:
+            db.close()
+
+    def test_reset_project_marks_active_tasks_cancelled_even_without_celery(self):
+        owner = self._create_user("reset_cancel_owner", "reset_cancel_owner@example.com")
+        project_dir = self.workspace / "reset-cancel-project"
+        chapters_dir = project_dir / "chapters"
+        chapters_dir.mkdir(parents=True)
+        (chapters_dir / "chapter_1.txt").write_text("旧章节", encoding="utf-8")
+        project = self._create_project(owner, name="Reset Cancel Novel", file_path=str(project_dir))
+        self._set_current_user(owner)
+
+        db = self.SessionLocal()
+        try:
+            chapter = Chapter(
+                project_id=project.id,
+                chapter_index=1,
+                title="第1章",
+                content="<p>旧章节</p>",
+                word_count=3,
+                status="generated",
+            )
+            task = GenerationTask(
+                project_id=project.id,
+                celery_task_id="celery-reset-cancel-1",
+                status="waiting_confirm",
+                progress=0.6,
+                current_chapter=1,
+            )
+            db.add_all([chapter, task])
+            db.commit()
+            db.refresh(task)
+            run = create_generation_workflow_run(
+                db=db,
+                project=project,
+                generation_task=task,
+                triggered_by_user_id=owner.id,
+            )
+            update_workflow_run_status(
+                db=db,
+                generation_task=task,
+                task_status="waiting_confirm",
+                current_step_key="waiting_confirm",
+                current_chapter=1,
+            )
+            run_id = run.id
+            db.commit()
+        finally:
+            db.close()
+
+        original_celery_available = projects_api.CELERY_AVAILABLE
+        try:
+            projects_api.CELERY_AVAILABLE = False
+            response = self.client.post(f"/api/projects/{project.id}/reset")
+        finally:
+            projects_api.CELERY_AVAILABLE = original_celery_available
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse((chapters_dir / "chapter_1.txt").exists())
+
+        db = self.SessionLocal()
+        try:
+            task = db.query(GenerationTask).filter(GenerationTask.celery_task_id == "celery-reset-cancel-1").one()
+            run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).one()
+            project_after_reset = db.query(Project).filter(Project.id == project.id).one()
+
+            self.assertEqual(task.status, "cancelled")
+            self.assertEqual(task.error_message, "Project reset cancelled this task")
+            self.assertIsNotNone(task.completed_at)
+            self.assertEqual(run.status, "cancelled")
+            self.assertEqual(run.current_step_key, "cancelled")
+            self.assertEqual(run.run_metadata["cancelled_by"], "project_reset")
+            self.assertEqual(project_after_reset.status, "draft")
+            self.assertEqual(db.query(Chapter).filter(Chapter.project_id == project.id).count(), 0)
+        finally:
+            db.close()
+
     def test_task_status_endpoint_includes_workflow_run_steps_and_feedback(self):
         owner = self._create_user("status_api_owner", "status_api_owner@example.com")
         project = self._create_project(owner, name="Status API Novel")

@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 from backend.database import get_db
 from backend.models import User, Project, Chapter, GenerationTask
 from backend.task_dispatch import dispatch_tracked_task, make_task_id
-from backend.task_status import active_project_tasks_query, get_active_project_task
+from backend.task_status import (
+    active_project_tasks_query,
+    get_active_project_task,
+    mark_active_project_tasks_terminal,
+)
 from backend.schemas import (
     ProjectCreate,
     ProjectUpdate,
@@ -840,17 +844,25 @@ def reset_project(
             detail="项目不存在"
         )
 
-    # 1. 查找所有未完成的任务，标记为 cancelled
+    # 1. 查找所有未完成的任务，先标记为 cancelled，再尽力从队列中撤销
     running_tasks = active_project_tasks_query(db, project_id).all()
+
+    mark_active_project_tasks_terminal(
+        db=db,
+        project_id=project_id,
+        task_status="cancelled",
+        current_step_key="cancelled",
+        error_message="Project reset cancelled this task",
+        metadata_updates={"cancelled_by": "project_reset"},
+    )
 
     if CELERY_AVAILABLE:
         for task in running_tasks:
             try:
-                # 尝试从Celery队列中撤销任务
+                # 尝试从 Celery 队列中撤销任务；运行中的任务仍依赖任务自身读取 cancelled 状态退出。
                 celery_app.control.revoke(task.celery_task_id, terminate=True)
             except Exception as e:
                 logger.warning(f"Failed to revoke celery task {task.celery_task_id}: {e}")
-            task.status = "cancelled"
 
     # 2. 删除所有已生成的章节
     db.query(Chapter).filter(Chapter.project_id == project_id).delete()
@@ -1005,13 +1017,16 @@ def clean_stuck_tasks(
         )
 
     # 查找所有卡住的未完成任务
-    stuck_tasks = active_project_tasks_query(db, project_id).all()
-
+    stuck_tasks = mark_active_project_tasks_terminal(
+        db=db,
+        project_id=project_id,
+        task_status="failure",
+        current_step_key="failed",
+        error_message="User manually cleaned up stuck task",
+        metadata_updates={"failed_by": "manual_cleanup"},
+    )
     count = len(stuck_tasks)
     if count > 0:
-        for task in stuck_tasks:
-            task.status = "failure"
-            task.error_message = "User manually cleaned up stuck task"
         db.commit()
         return {
             "status": "ok",
