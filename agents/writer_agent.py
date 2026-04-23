@@ -108,9 +108,22 @@ def generate_chapter(
         # 第一次没标题，重试一次
         logger.warning(f"第{chapter_num}章生成忘记写标题，自动重试...")
         if client:
-            result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, client=client)
+            result = call_volc_api(
+                "writer",
+                user_input,
+                max_tokens=WRITER_MAX_TOKENS,
+                content_type=content_type,
+                context=context,
+                client=client,
+            )
         else:
-            result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type)
+            result = call_volc_api(
+                "writer",
+                user_input,
+                max_tokens=WRITER_MAX_TOKENS,
+                content_type=content_type,
+                context=context,
+            )
         fixed_result = _check_and_fix_title(result, chapter_num)
 
     return fixed_result

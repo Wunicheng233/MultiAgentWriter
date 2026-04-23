@@ -3,7 +3,6 @@
 注册、登录、获取用户信息
 """
 
-import secrets
 import datetime
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -109,10 +108,19 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.post("/refresh-api-key", response_model=UserResponse, summary="刷新API Key")
+@router.post("/refresh-api-key", response_model=UserResponse, summary="清除用户自定义API Key")
 def refresh_api_key(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """生成新的API Key，旧Key失效"""
-    current_user.api_key = secrets.token_urlsafe(32)
+    """兼容旧前端入口：清除用户自定义模型 API Key，恢复使用系统统一配置。"""
+    current_user.api_key = None
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.delete("/api-key", response_model=UserResponse, summary="清除用户自定义API Key")
+def clear_api_key(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """清除用户自己的模型 API Key，恢复使用系统统一配置。"""
+    current_user.api_key = None
     db.commit()
     db.refresh(current_user)
     return current_user

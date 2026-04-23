@@ -1,6 +1,8 @@
-# 📖 Writer - 多Agent AI小说自动创作系统
+# 📖 Writer - Multi-Agent 小说创作系统
 
-这是一个**全自动多Agent协同小说创作系统**，从策划到生产全流程自动化。所有代码几乎全部依赖AI。
+这是一个正在演进中的 **Multi-Agent 小说创作系统**。当前版本已经具备前端工作台、FastAPI 后端、Celery 异步生成、多角色 Agent 编排、章节编辑、导出、分享和基础质量评审能力。
+
+> 当前真实状态：系统核心仍是 `orchestrator` 驱动的串行工作流，主要链路是 Planner → Writer → Guardrails → Critic → Revise。我们正在逐步把它演进为更可追踪、可回放、可评测的多智能体创作平台，新的 `WorkflowRun`、`Artifact`、`FeedbackItem`、`AgentContract` 和 `evaluation_harness` 已经开始承担长期架构基础。
 
 > **部署说明**: 本项目采用前后端分离架构，需要后端提供API服务。
 > 
@@ -10,12 +12,13 @@
 
 ## ✨ 功能特点
 
-- 🤖 **多Agent分工协作** - 策划/设定/写作/校验/润色/终审全流程专业化分工
-- ⚡ **并行检查加速** - 设定/质量/合规三项检查并行执行，节省约一半时间
-- 🔧 **统一问题修复** - 一轮多个问题一次性修复，减少LLM调用次数
-- 🌍 **世界观一致性保障** - 专门的Worldview Manager追踪时间线/角色/伏笔，杜绝人设崩塌时间混乱
+- 🤖 **多角色创作链路** - Planner 负责策划，Writer 负责章节，Critic 负责评审，Revise 负责修订
+- 🧭 **工作流与工件追踪** - 记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、结构化反馈与章节评审报告
+- 🧪 **Evaluation Harness 基座** - Critic 结果会标准化为章节评审报告，并沉淀为可版本化工件
+- 🛡️ **系统层 Guardrails** - 在 Critic 前执行纯代码格式/标题/段落/字数等基础检查
+- 🌍 **世界观与上下文管理** - Worldview Manager 与向量检索支撑跨章节衔接
 - 🔍 **向量语义检索** - ChromaDB存储相关历史内容，保证剧情连贯性
-- ✅ **多级质量控制** - 硬伤检查 → 统一修复 → 润色 → 对抗性终审，多重质量保证
+- ✅ **质量控制闭环** - Critic 打分、问题清单、修订循环和质量分析面板
 - 📱 **移动端友好阅读** - 自动短段落排版，适配手机阅读
 - 📦 **多格式导出** - 支持 EPUB / DOCX / HTML 三种格式导出
 - 📜 **章节版本历史** - 每次保存自动创建版本，支持一键回滚
@@ -24,31 +27,31 @@
 - 👥 **项目协作** - 支持添加协作者，共同浏览项目
 - 🤝 **可选人机交互确认** - 支持策划方案确认和每章生成确认，你可以掌控创作方向
 
-## 🏗️ 系统架构
+## 🏗️ 当前系统架构
 
-重构后采用**前后端分离 + 异步任务队列**架构：
+当前采用**前后端分离 + 异步任务队列 + 文件/数据库混合持久化**架构。长期目标是让数据库中的工作流与 Artifact 成为主事实源，文件系统逐步变为派生工件和兼容桥。
 
 ```
 writer/
 ├── backend/                # FastAPI 后端 RESTful API
 │   ├── api/                # API 端点（认证/项目/章节/任务/分享）
-│   └── models.py           # SQLAlchemy ORM 数据模型
+│   ├── models.py           # SQLAlchemy ORM 数据模型
+│   ├── workflow_service.py # 工作流、工件、反馈服务
+│   └── evaluation_sync.py  # harness 评审报告落库同步
 ├── frontend/               # React + TypeScript 前端
 │   └── src/
 │       ├── pages/          # 页面组件（登录/项目列表/编辑器/分析等）
 │       └── utils/          # API 封装和工具
-├── agents/                 # 各专业 Agent
+├── agents/                 # 当前启用的 Agent 函数
 │   ├── planner_agent.py    # 小说策划
-│   ├── guardian_agent.py   # 设定一致性校验
 │   ├── writer_agent.py     # 章节生成
-│   ├── editor_agent.py     # 文笔润色
-│   ├── compliance_agent.py # 合规检查
-│   ├── quality_agent.py   # 质量格式检查
-│   ├── critic_agent.py     # 终审对抗性评审
-│   └── fix_agent.py       # 统一问题修复
+│   ├── critic_agent.py     # 章节评审
+│   └── revise_agent.py     # 根据问题清单修订
 ├── core/
 │   ├── config.py           # 配置中心（pydantic-settings）
 │   ├── orchestrator.py     # 主编排器
+│   ├── agent_contract.py   # Agent 契约定义
+│   ├── evaluation_harness.py # 章节评审标准化基座
 │   └── worldview_manager.py # 世界观状态管理
 ├── tasks/                  # Celery 异步任务
 │   ├── writing_tasks.py    # 小说生成任务
@@ -61,8 +64,7 @@ writer/
 │   └── vector_db.py        # ChromaDB 向量检索
 ├── alembic/                # 数据库迁移
 ├── main.py                 # CLI 入口（也可直接生成）
-├── requirements.txt        # Python 依赖
-└── TESTING.md              # 完整测试计划
+└── requirements.txt        # Python 依赖
 ```
 
 ## 🚀 快速开始
@@ -165,7 +167,7 @@ alembic upgrade head
 打开浏览器访问：`http://localhost:5173`
 
 1. 注册新用户账号
-2. 在设置页面填入你的火山引擎 API Key
+2. 在设置页面填入你的火山引擎 API Key；如果服务器已经配置统一 Key，也可以不填自定义 Key
 3. 登录后点击"创建新项目"
 4. 填写小说需求：
    - **跳过策划确认**: 开启后自动通过策划方案，不需要人工确认
@@ -185,7 +187,7 @@ alembic upgrade head
 
 ---
 
-## 📊 工作流程
+## 📊 当前工作流程
 
 ```
 用户需求加载
@@ -195,16 +197,15 @@ alembic upgrade head
 对每一章：
   1. writer 生成初稿
   ↓
-  2. 【并行同时】guardian 设定检查 + quality 硬伤检查 + compliance 合规检查
+  2. system_guardrails 执行标题/格式/字数/段落等基础检查
   ↓
-  3. 全部通过 → 下一步
-     有问题 → 汇总所有问题 → fix agent 一次性修复 → 最多重试 4 轮
+  3. critic 生成结构化评分与问题清单
   ↓
-  4. editor 文笔润色
+  4. 未通过时 revise 根据问题清单修订，最多循环 2 轮
   ↓
-  5. critic 终审挑刺 → 有问题 → optimize 修复 → 最多重试 3 轮
+  5. evaluation_harness 标准化评审结果，写入 info.json，并同步为 Artifact
   ↓
-  6. 生成标题 → 保存 → 更新世界观状态
+  6. 保存章节 → 同步数据库 → 记录 chapter_draft / chapter_evaluation 工件
   ↓
 所有章节完成 → 可导出多种格式
 ```
@@ -272,6 +273,8 @@ alembic upgrade head
 | `VECTOR_CHUNK_SIZE` | 向量数据库分块大小 | 500 |
 | `CRITIC_PASS_SCORE` | Critic 及格线 | 8 |
 
+> 注：部分历史配置项仍保留在配置文件中，当前主链路并不会全部使用。实际稳定主链路以 Planner / Writer / Critic / Revise / Guardrails / Evaluation Harness 为准。
+
 ---
 
 ## 🧑‍💼 Agent 职责分工
@@ -279,13 +282,10 @@ alembic upgrade head
 | Agent | 职责 |
 |-------|------|
 | Planner | 生成小说整体策划大纲 |
-| Guardian | 生成设定圣经，检查设定一致性 |
 | Writer | 生成章节初稿，重写设定错误 |
-| Quality | 检查字数/标题/格式硬伤 |
-| Compliance | 内容合规检查 |
-| Fix | **统一修复所有问题**，一轮多个问题一次性修复 |
-| Editor | 文笔润色，去除 AI 刻板味 |
-| Critic | 终审挑刺打分，发现软问题 |
+| Critic | 章节评审、打分、输出问题清单 |
+| Revise | 根据 Critic 或用户反馈修订章节 |
+| Evaluation Harness | 标准化 Critic 输出，沉淀可追踪评审报告 |
 | Worldview Manager | 追踪时间线/角色/伏笔，保证全局一致性 |
 
 ---

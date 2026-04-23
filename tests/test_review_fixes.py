@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -9,9 +10,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import backend.api.projects as projects_api
+import backend.deps as deps
+import agents.writer_agent as writer_agent
 import core.orchestrator as orchestrator_module
-from backend.api.auth import register
+import utils.file_utils as file_utils
+import utils.volc_engine as volc_engine
+from backend.api.auth import clear_api_key, refresh_api_key, register
 from backend.api.chapters import restore_version, update_chapter
+from backend.chapter_sync import html_content_to_plain_text
 from backend.database import Base, get_db
 from backend.deps import get_current_user
 from backend.main import app
@@ -146,6 +152,137 @@ class ReviewFixRegressionTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_refresh_api_key_compat_endpoint_clears_custom_model_api_key(self):
+        owner = self._create_user("api_owner", "api_owner@example.com")
+
+        db = self.SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == owner.id).one()
+            user.api_key = "custom-model-key"
+            db.commit()
+
+            refreshed_user = refresh_api_key(current_user=user, db=db)
+            self.assertIsNone(refreshed_user.api_key)
+
+            user.api_key = "another-custom-key"
+            db.commit()
+            cleared_user = clear_api_key(current_user=user, db=db)
+            self.assertIsNone(cleared_user.api_key)
+        finally:
+            db.close()
+
+    def test_auth_dependency_does_not_log_raw_token_or_payload(self):
+        owner = self._create_user("auth_log_owner", "auth_log_owner@example.com")
+        raw_token = "super-secret-token"
+
+        class FakeRequest:
+            headers = {"Authorization": f"Bearer {raw_token}"}
+
+        db = self.SessionLocal()
+        original_decode_token = deps.decode_token
+        try:
+            deps.decode_token = lambda token: {"sub": str(owner.id), "role": "sensitive-payload"}
+            with self.assertLogs("backend.deps", level="DEBUG") as logs:
+                user = asyncio.run(deps.get_current_user(FakeRequest(), db=db))
+
+            self.assertEqual(user.id, owner.id)
+            log_text = "\n".join(logs.output)
+            self.assertNotIn(raw_token, log_text)
+            self.assertNotIn("Bearer", log_text)
+            self.assertNotIn("sensitive-payload", log_text)
+        finally:
+            deps.decode_token = original_decode_token
+            db.close()
+
+    def test_html_content_to_plain_text_removes_editor_markup(self):
+        content = "<p>第一段</p><p>第二段<br/>换行</p>"
+        plain_text = html_content_to_plain_text(content)
+
+        self.assertIn("第一段", plain_text)
+        self.assertIn("第二段", plain_text)
+        self.assertIn("换行", plain_text)
+        self.assertNotIn("<p>", plain_text)
+
+    def test_volc_retry_preserves_client_and_context(self):
+        captured_contexts = []
+
+        class FakeMessage:
+            content = "成功"
+
+        class FakeChoice:
+            message = FakeMessage()
+
+        class FakeUsage:
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+
+        class FakeResponse:
+            choices = [FakeChoice()]
+            usage = FakeUsage()
+
+        class FakeCompletions:
+            def __init__(self):
+                self.calls = 0
+
+            def create(self, **kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("temporary")
+                return FakeResponse()
+
+        class FakeClient:
+            def __init__(self):
+                self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        fake_client = FakeClient()
+        original_load_prompt = file_utils.load_prompt
+        original_sleep = volc_engine.time.sleep
+        try:
+            file_utils.load_prompt = lambda agent_role, content_type=None, context=None: captured_contexts.append(context) or "system"
+            volc_engine.time.sleep = lambda seconds: None
+            result = volc_engine.call_volc_api(
+                agent_role="writer",
+                user_input="input",
+                client=fake_client,
+                context={"world_bible": "设定"},
+                max_retries=2,
+            )
+        finally:
+            file_utils.load_prompt = original_load_prompt
+            volc_engine.time.sleep = original_sleep
+
+        self.assertEqual(result, "成功")
+        self.assertEqual(captured_contexts, [{"world_bible": "设定"}, {"world_bible": "设定"}])
+
+    def test_writer_title_retry_preserves_prompt_context(self):
+        captured_contexts = []
+
+        def fake_call_volc_api(*args, **kwargs):
+            captured_contexts.append(kwargs.get("context"))
+            if len(captured_contexts) == 1:
+                return "没有标题的正文"
+            return "第1章 标题\n\n正文"
+
+        original_call = writer_agent.call_volc_api
+        original_search_ref = writer_agent.search_reference_style
+        try:
+            writer_agent.call_volc_api = fake_call_volc_api
+            writer_agent.search_reference_style = lambda *args, **kwargs: ""
+            result = writer_agent.generate_chapter(
+                setting_bible="设定",
+                plan="第1章 大纲",
+                chapter_num=1,
+                content_type="novel",
+            )
+        finally:
+            writer_agent.call_volc_api = original_call
+            writer_agent.search_reference_style = original_search_ref
+
+        self.assertTrue(result.startswith("第1章"))
+        self.assertEqual(captured_contexts[0], captured_contexts[1])
+        self.assertEqual(captured_contexts[0]["world_bible"], "设定")
+
     def test_update_chapter_writes_back_to_chapters_subdirectory(self):
         owner = self._create_user("owner3", "owner3@example.com")
         project_dir = self.workspace / "project-update"
@@ -179,7 +316,8 @@ class ReviewFixRegressionTests(unittest.TestCase):
             )
             chapter_path = project_dir / "chapters" / "chapter_1.txt"
             self.assertTrue(chapter_path.exists())
-            self.assertEqual(chapter_path.read_text(encoding="utf-8"), chapter.content)
+            self.assertEqual(chapter.content, "<p>新内容</p>")
+            self.assertEqual(chapter_path.read_text(encoding="utf-8"), "第一章\n\n新内容")
         finally:
             db.close()
 
@@ -226,7 +364,8 @@ class ReviewFixRegressionTests(unittest.TestCase):
             )
             chapter_path = project_dir / "chapters" / "chapter_1.txt"
             self.assertTrue(chapter_path.exists())
-            self.assertEqual(chapter_path.read_text(encoding="utf-8"), chapter.content)
+            self.assertEqual(chapter.content, "<p>历史内容</p>")
+            self.assertEqual(chapter_path.read_text(encoding="utf-8"), "第一章\n\n历史内容")
         finally:
             db.close()
 

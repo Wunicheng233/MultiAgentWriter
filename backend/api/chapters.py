@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
+from backend.chapter_sync import html_content_to_plain_text, render_chapter_plain_text
 from backend.database import get_db
 from backend.models import User, Project, Chapter, GenerationTask, ChapterVersion
 from backend.task_status import ACTIVE_TASK_STATUSES
@@ -100,10 +101,11 @@ def update_chapter(
         if hasattr(chapter, field):
             setattr(chapter, field, value)
 
-    # 计算字数：统计汉字数量，HTML标签不计入
-    import re
+    # 计算字数：统计纯文本汉字数量，HTML标签不计入
     if chapter_in.content is not None:
-        chinese_chars = re.findall(r'[\u4e00-\u9fff]', chapter_in.content)
+        import re
+        plain_content = html_content_to_plain_text(chapter_in.content)
+        chinese_chars = re.findall(r'[\u4e00-\u9fff]', plain_content)
         chapter.word_count = len(chinese_chars)
 
     # 状态改为edited
@@ -145,7 +147,7 @@ def update_chapter(
         try:
             chapter_file = get_project_chapter_file(project.file_path, chapter_index)
             with open(chapter_file, "w", encoding="utf-8") as f:
-                f.write(chapter.content)
+                f.write(render_chapter_plain_text(chapter, chapter_index))
         except Exception as e:
             # 文件写入失败不返回错误，只记录日志
             logger.warning(f"Failed to write chapter file: {e}")
@@ -383,7 +385,7 @@ def restore_version(
         try:
             chapter_file = get_project_chapter_file(project.file_path, chapter_index)
             with open(chapter_file, "w", encoding="utf-8") as f:
-                f.write(chapter.content)
+                f.write(render_chapter_plain_text(chapter, chapter_index))
         except Exception as e:
             logger.warning(f"Failed to write chapter file: {e}")
 

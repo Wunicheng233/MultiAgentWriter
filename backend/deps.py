@@ -7,7 +7,6 @@ FastAPI 依赖项
 from typing import Generator
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from jose import JWTError
 
 from backend.database import get_db
 from backend.auth import decode_token
@@ -23,7 +22,8 @@ async def get_current_user(
     """
     获取当前认证用户
     用于保护需要认证的路由
-    手动从 Authorization header 提取 token，方便调试
+    手动从 Authorization header 提取 token。
+    注意：不要记录 Authorization header、token 或 payload，避免密钥进入日志。
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -33,42 +33,39 @@ async def get_current_user(
 
     # 手动从 header 提取 token
     auth_header = request.headers.get('Authorization')
-    logger.info(f"[auth-debug] Authorization header: {auth_header}")
 
     if not auth_header:
-        logger.info("[auth-debug] No Authorization header found")
+        logger.debug("Authorization header not found")
         raise credentials_exception
 
     parts = auth_header.split()
     if len(parts) != 2 or parts[0].lower() != 'bearer':
-        logger.info(f"[auth-debug] Invalid Authorization format: {parts}")
+        logger.debug("Invalid Authorization header format")
         raise credentials_exception
 
     token = parts[1]
-    logger.info(f"[auth-debug] Extracted token: {token[:30]}...")
 
     payload = decode_token(token)
     if payload is None:
-        logger.info("[auth-debug] decode_token returned None - JWT verification failed")
+        logger.debug("JWT verification failed")
         raise credentials_exception
 
-    logger.info(f"[auth-debug] Decoded payload: {payload}")
     user_id = payload.get("sub")
     if user_id is None:
-        logger.info("[auth-debug] No 'sub' field in payload")
+        logger.debug("JWT payload missing subject")
         raise credentials_exception
 
     # JWT 解码后 sub 可能是字符串，需要转成 int
     try:
         user_id = int(user_id)
     except (ValueError, TypeError):
-        logger.info(f"[auth-debug] Invalid user_id type: {type(user_id)}, value={user_id}")
+        logger.debug("JWT subject is not a valid user id")
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
     if user is None:
-        logger.info(f"[auth-debug] User not found or inactive: user_id={user_id}")
+        logger.debug("Authenticated user not found or inactive")
         raise credentials_exception
 
-    logger.info(f"[auth-debug] User authenticated: id={user.id}, username={user.username}")
+    logger.debug("User authenticated successfully")
     return user

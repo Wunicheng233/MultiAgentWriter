@@ -39,8 +39,8 @@ export async function getMe(): Promise<User> {
   return res.data
 }
 
-export async function refreshApiKey(): Promise<User> {
-  const res = await api.post<User>('/auth/refresh-api-key')
+export async function clearApiKey(): Promise<User> {
+  const res = await api.delete<User>('/auth/api-key')
   return res.data
 }
 

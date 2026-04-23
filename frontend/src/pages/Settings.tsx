@@ -7,7 +7,7 @@ import { Card } from '../components/Card'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { useAuthStore } from '../store/useAuthStore'
-import { refreshApiKey, getUserMonthlyTokenStats, updateApiKey } from '../utils/endpoints'
+import { clearApiKey, getUserMonthlyTokenStats, updateApiKey } from '../utils/endpoints'
 import { useToast } from '../components/Toast'
 
 export const Settings: React.FC = () => {
@@ -22,16 +22,16 @@ export const Settings: React.FC = () => {
     queryFn: getUserMonthlyTokenStats,
   })
 
-  const refreshMutation = useMutation({
-    mutationFn: refreshApiKey,
+  const clearMutation = useMutation({
+    mutationFn: clearApiKey,
     onSuccess: (data) => {
       setUser(data)
       queryClient.invalidateQueries({ queryKey: ['me'] })
-      showToast('API Key 已刷新', 'success')
+      showToast('已切换为系统默认 API Key', 'success')
       setLoading(false)
     },
     onError: () => {
-      showToast('刷新失败', 'error')
+      showToast('清除失败', 'error')
       setLoading(false)
     },
   })
@@ -51,9 +51,9 @@ export const Settings: React.FC = () => {
     },
   })
 
-  const handleRefresh = () => {
+  const handleClear = () => {
     setLoading(true)
-    refreshMutation.mutate()
+    clearMutation.mutate()
   }
 
   const handleUpdate = () => {
@@ -117,13 +117,15 @@ export const Settings: React.FC = () => {
             </Button>
           </div>
           <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-secondary mb-4">或者，生成一个随机 API Key：</p>
+            <p className="text-secondary mb-4">
+              如果你想使用服务器统一配置的 API Key，可以清除当前自定义 Key。
+            </p>
             <Button
               variant="secondary"
-              onClick={handleRefresh}
+              onClick={handleClear}
               disabled={loading}
             >
-              {loading ? '刷新中...' : '生成新的 API Key'}
+              {loading ? '清除中...' : '清除自定义 API Key'}
             </Button>
           </div>
           <p className="text-muted text-sm mt-3">

@@ -148,4 +148,15 @@ def call_volc_api(
             logger.error(f"{agent_role} Agent已重试{max_retries}次仍失败，放弃重试")
             raise RuntimeError(f"{agent_role} Agent调用失败，已达到最大重试次数: {e}") from e
         time.sleep(2)
-        return call_volc_api(agent_role, user_input, temperature, max_tokens, content_type, max_retries - 1)
+        return call_volc_api(
+            agent_role=agent_role,
+            user_input=user_input,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            content_type=content_type,
+            max_retries=max_retries - 1,
+            user_id=user_id,
+            project_id=project_id,
+            client=client,
+            context=context,
+        )

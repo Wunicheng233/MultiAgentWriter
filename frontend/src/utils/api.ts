@@ -14,7 +14,6 @@ const api: AxiosInstance = axios.create({
 // 请求拦截器：自动添加 JWT
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('access_token')
-  console.log(`[api-interceptor] Request ${config.url}, token from localStorage:`, token ? `exists (${token.slice(0, 20)}...)` : 'null')
   if (token) {
     const authValue = `Bearer ${token}`
 
@@ -26,7 +25,6 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
       // Handle plain object headers
       (config.headers as Record<string, string>).Authorization = authValue
     }
-    console.log(`[api-interceptor] Added Authorization header: Bearer ${token.slice(0, 20)}...`)
   }
   return config
 })
