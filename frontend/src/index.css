@@ -83,7 +83,7 @@
   }
 
   .paper-card {
-    @apply bg-white/60 backdrop-blur-[8px] border border-border rounded-comfortable shadow-standard;
+    @apply backdrop-blur-[8px] rounded-comfortable;
   }
 
   .paper-card-hover {

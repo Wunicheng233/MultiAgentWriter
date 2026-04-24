@@ -849,6 +849,87 @@ class NovelOrchestrator:
 
         logger.info(f"系统层防护完成，通过: {guardrail_result.passed}")
 
+        def _merge_guardrail_issues_into_review(guardrail_result: GuardrailResult, issues: List[Dict]) -> bool:
+            """
+            将系统防护发现的问题合并到 Critic issues，让 Revise 真正修复这些问题。
+
+            Returns:
+                是否仍然通过（True 表示不需要因为 guardrails 强制失败）
+            """
+            ok = True
+            word_count = guardrail_result.metrics.get("word_count", 0)
+            target_wc = guardrail_context["target_word_count"]
+            if word_count > 0:
+                deviation = abs(word_count - target_wc) / target_wc
+                if deviation > 0.30:
+                    if word_count < target_wc:
+                        issues.append(
+                            {
+                                "type": "字数不足",
+                                "location": "全文",
+                                "fix": (
+                                    f"本章实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节："
+                                    "增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。"
+                                ),
+                            }
+                        )
+                    else:
+                        issues.append(
+                            {
+                                "type": "字数超标",
+                                "location": "全文",
+                                "fix": f"本章实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。",
+                            }
+                        )
+                    ok = False
+
+            if "G-05" in guardrail_result.violations:
+                issues.append(
+                    {
+                        "type": "格式问题",
+                        "location": "全文",
+                        "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。",
+                    }
+                )
+                ok = False
+
+            if "G-09" in guardrail_result.violations:
+                cliches = guardrail_result.violations["G-09"]
+                issues.append(
+                    {
+                        "type": "文风问题",
+                        "location": "全文",
+                        "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。",
+                    }
+                )
+                ok = False
+
+            has_protagonist_issue = any(
+                sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg
+            )
+            if has_protagonist_issue:
+                issues.append(
+                    {
+                        "type": "剧情问题",
+                        "location": "本章",
+                        "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。",
+                    }
+                )
+                ok = False
+
+            has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
+            if has_hook_issue:
+                issues.append(
+                    {
+                        "type": "结构问题",
+                        "location": "本章结尾",
+                        "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。",
+                    }
+                )
+                ok = False
+
+            return ok
+
         # Step 3: Critic 评审
         chapter_outline = self.get_chapter_outline(chapter_index)
         passed, score, dimensions, issues = self._run_critic_harness(
@@ -871,68 +952,7 @@ class NovelOrchestrator:
             if dim in self.dimension_scores:
                 self.dimension_scores[dim].append(score_val)
 
-        # 将系统防护发现的问题添加到issues列表，让Revise一起修复
-        # 这样系统防护检查出来的问题不会只停留在日志，会真正被修复
-        word_count = guardrail_result.metrics.get('word_count', 0)
-        target_wc = guardrail_context['target_word_count']
-        if word_count > 0:
-            deviation = abs(word_count - target_wc) / target_wc
-            # 如果字数偏离超过30%，强制加入修订清单
-            if deviation > 0.30:
-                if word_count < target_wc:
-                    issues.append({
-                        "type": "字数不足",
-                        "location": "全文",
-                        "fix": f"本章实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节：增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。"
-                    })
-                    passed = False
-                    logger.warning(f"字数不足偏差超过30%，加入修订清单")
-                else:
-                    issues.append({
-                        "type": "字数超标",
-                        "location": "全文",
-                        "fix": f"本章实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。"
-                    })
-                    passed = False
-                    logger.warning(f"字数超标偏差超过30%，加入修订清单")
-
-        # 添加其他系统防护发现的问题到修订清单
-        if "G-05" in guardrail_result.violations:
-            issues.append({
-                "type": "格式问题",
-                "location": "全文",
-                "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。"
-            })
-            passed = False
-
-        if "G-09" in guardrail_result.violations:
-            cliches = guardrail_result.violations["G-09"]
-            issues.append({
-                "type": "文风问题",
-                "location": "全文",
-                "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。"
-            })
-            passed = False
-
-        # 主角未出场也要加入修订
-        has_protagonist_issue = any(sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg)
-        if has_protagonist_issue:
-            issues.append({
-                "type": "剧情问题",
-                "location": "本章",
-                "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。"
-            })
-            passed = False
-
-        # 结尾缺少钩子也要加入修订
-        has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
-        if has_hook_issue:
-            issues.append({
-                "type": "结构问题",
-                "location": "本章结尾",
-                "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。"
-            })
-            passed = False
+        passed = passed and _merge_guardrail_issues_into_review(guardrail_result, issues)
 
         revise_count = 0
         max_revise_loops = self.MAX_REVISE_LOOPS
@@ -960,66 +980,7 @@ class NovelOrchestrator:
             guardrail_result = run_system_guardrails(current_content, guardrail_context)
             current_content = guardrail_result.corrected_content
 
-            # 再次检查字数偏差，如果还是超标，加入问题清单
-            word_count = guardrail_result.metrics.get('word_count', 0)
-            target_wc = guardrail_context['target_word_count']
-            if word_count > 0:
-                deviation = abs(word_count - target_wc) / target_wc
-                if deviation > 0.30:
-                    if word_count < target_wc:
-                        issues.append({
-                            "type": "字数不足",
-                            "location": "全文",
-                            "fix": f"本章修订后实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节：增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。",
-                        })
-                        passed = False
-                        logger.warning(f"字数不足偏差超过30%，加入修订清单");
-                    else:
-                        issues.append({
-                            "type": "字数超标",
-                            "location": "全文",
-                            "fix": f"本章修订后实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。",
-                        })
-                        passed = False
-                        logger.warning(f"字数超标偏差超过30%，加入修订清单");
-
-            # 添加其他系统防护发现的问题到修订清单
-            if "G-05" in guardrail_result.violations:
-                issues.append({
-                    "type": "格式问题",
-                    "location": "全文",
-                    "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。",
-                })
-                passed = False
-
-            if "G-09" in guardrail_result.violations:
-                cliches = guardrail_result.violations["G-09"]
-                issues.append({
-                    "type": "文风问题",
-                    "location": "全文",
-                    "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。",
-                })
-                passed = False
-
-            # 主角未出场也要加入修订
-            has_protagonist_issue = any(sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg)
-            if has_protagonist_issue:
-                issues.append({
-                    "type": "剧情问题",
-                    "location": "本章",
-                    "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。",
-                })
-                passed = False
-
-            # 结尾缺少钩子也要加入修订
-            has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
-            if has_hook_issue:
-                issues.append({
-                    "type": "结构问题",
-                    "location": "本章结尾",
-                    "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。",
-                })
-                passed = False
+            passed = passed and _merge_guardrail_issues_into_review(guardrail_result, issues)
 
             # Step 5: Critic 复评
             passed, score, dimensions, issues = self._run_critic_harness(

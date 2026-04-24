@@ -217,12 +217,12 @@ def regenerate_chapter(
     db.commit()
     db.refresh(task)
 
-    # TODO: 后续支持只生成单章，目前完整生成
+    # 仅重新生成指定章节：通过给 Celery 任务传入 chapter range 覆盖 user_requirements.yaml。
     dispatch_tracked_task(
         db=db,
         task=task,
         celery_task=generate_novel_task,
-        args=(project_dir, str(current_user.id)),
+        args=(project_dir, str(current_user.id), chapter_index, chapter_index),
         project=project,
     )
 

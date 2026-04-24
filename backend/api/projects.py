@@ -925,9 +925,9 @@ def list_collaborators(
     project = check_project_access(project_id, current_user, db, require_owner=True)
     if not project:
         raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="项目不存在"
-    )
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在",
+        )
 
     collaborators = db.query(ProjectCollaborator)\
         .join(User)\
@@ -960,16 +960,16 @@ def add_collaborator(
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-        detail="项目不存在"
-    )
+            detail="项目不存在",
+        )
 
     # 查找用户
     user = db.query(User).filter(User.username == request.username).first()
     if not user:
         raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"用户 {request.username} 不存在"
-    )
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"用户 {request.username} 不存在",
+        )
 
     # 检查是否已是协作者
     existing = db.query(ProjectCollaborator).filter(

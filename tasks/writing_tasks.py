@@ -64,6 +64,8 @@ def generate_novel_task(
     self,
     project_dir: Optional[str] = None,
     user_id: Optional[str] = None,
+    start_chapter: Optional[int] = None,
+    end_chapter: Optional[int] = None,
 ) -> Dict:
     """
     生成小说异步任务
@@ -71,7 +73,14 @@ def generate_novel_task(
     :param user_id: 用户ID，用于追踪和权限控制
     :return: 生成结果统计
     """
-    logger.info(f"Starting generate_novel task, task_id={self.request.id}, project_dir={project_dir}, user_id={user_id}")
+    logger.info(
+        "Starting generate_novel task, task_id=%s, project_dir=%s, user_id=%s, start_chapter=%s, end_chapter=%s",
+        self.request.id,
+        project_dir,
+        user_id,
+        start_chapter,
+        end_chapter,
+    )
 
     # 获取数据库会话，查找对应的GenerationTask记录
     previous_run_context = get_current_run_context_optional()
@@ -351,6 +360,8 @@ def generate_novel_task(
                 project_dir_path = Path(project_dir)
                 req_file = project_dir_path / "user_requirements.yaml"
                 # 从project.config构造user_requirements格式
+                effective_start_chapter = start_chapter or project.config.get("start_chapter", 1)
+                effective_end_chapter = end_chapter or project.config.get("end_chapter", 10)
                 user_requirements = {
                     "novel_name": project.config.get("novel_name", project.name),
                     "novel_description": project.config.get("novel_description", project.description or ""),
@@ -360,8 +371,8 @@ def generate_novel_task(
                     "core_hook": project.config.get("core_hook", ""),
                     "target_platform": project.config.get("target_platform", "网络小说"),
                     "chapter_word_count": project.config.get("chapter_word_count", 2000),
-                    "start_chapter": project.config.get("start_chapter", 1),
-                    "end_chapter": project.config.get("end_chapter", 10),
+                    "start_chapter": effective_start_chapter,
+                    "end_chapter": effective_end_chapter,
                     "skip_plan_confirmation": project.config.get("skip_plan_confirmation", False),
                     "skip_chapter_confirmation": project.config.get("skip_chapter_confirmation", False),
                     "allow_plot_adjustment": project.config.get("allow_plot_adjustment", False),

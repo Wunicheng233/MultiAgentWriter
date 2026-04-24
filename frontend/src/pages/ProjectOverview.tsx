@@ -549,7 +549,7 @@ export const ProjectOverview: React.FC = () => {
   return (
     <Layout>
       <div className="mx-auto max-w-content space-y-6">
-        <Card className="overflow-hidden border-sage/15 bg-white/50">
+        <Card variant="elevated" className="overflow-hidden">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-4 flex flex-wrap items-center gap-3">

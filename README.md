@@ -2,6 +2,10 @@
 
 多智能体协作小说创作系统
 
+<p align="center">
+  <a href="https://htmlpreview.github.io/?https://github.com/yourusername/storyforge/blob/main/docs/homepage.html"><strong>→ 查看交互式展示页</strong></a>
+</p>
+
 ---
 
 故事创作的静谧之所。人类创意与人工智能在此和谐协作——策划、写作、评审、修订，各司其职，如同一个安静运转的专业创作团队。
