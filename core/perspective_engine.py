@@ -104,3 +104,57 @@ class PerspectiveEngine:
             'mental_models': mental_models,
             'worldview_principles': worldview,
         }
+
+    def inject_for_writer(self, original_prompt: str, strength: float = 0.7) -> str:
+        """为 Writer 注入表达风格DNA
+
+        注入位置：prompt 末尾（在所有硬性规则之后）
+        注入内容：句式偏好、词汇特征、节奏感、经典句式参考
+        """
+        if not self.perspective_data:
+            return original_prompt
+
+        injection = self._get_writer_injection(strength)
+
+        return f"""{original_prompt}
+
+---
+
+## 表达风格适配：{self.perspective_data['name']} 模式
+
+### 句式偏好
+{injection['sentence_patterns']}
+
+### 词汇特征
+{injection['vocabulary_traits']}
+
+### 节奏感
+{injection['rhythm_principles']}
+
+### 经典句式参考（可直接化用）
+{injection['example_sentences']}
+"""
+
+    def _get_writer_injection(self, strength: float) -> Dict[str, str]:
+        """根据强度裁剪 Writer 注入内容"""
+        data = self.perspective_data['writer_injection']
+
+        sentences = data['sentence_patterns']
+        vocabulary = data['vocabulary_traits']
+        rhythm = data['rhythm_principles']
+        examples = data['example_sentences']
+
+        if strength <= 0.3:
+            # Low intensity: only sentence patterns and vocabulary
+            rhythm = ''
+            examples = ''
+        elif strength <= 0.7:
+            # Medium intensity: no examples
+            examples = ''
+
+        return {
+            'sentence_patterns': sentences,
+            'vocabulary_traits': vocabulary,
+            'rhythm_principles': rhythm,
+            'example_sentences': examples,
+        }

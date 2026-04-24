@@ -152,3 +152,81 @@ class PlannerInjectionTests(unittest.TestCase):
         self.assertIn("第一行", result)
         self.assertIn("第二行", result)
         self.assertIn("第三行包含特殊字符!@#$%^&*()", result)
+
+
+class WriterInjectionTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_builtin = PerspectiveEngine.BUILTIN_PERSPECTIVES
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = Path(self.temp_dir)
+
+        test_file = Path(self.temp_dir) / 'test-writer.yaml'
+        with open(test_file, 'w', encoding='utf-8') as f:
+            yaml.safe_dump({
+                'name': '测试作家',
+                'genre': '测试',
+                'description': '测试',
+                'strength_recommended': 0.7,
+                'strengths': [],
+                'weaknesses': [],
+                'planner_injection': {},
+                'writer_injection': {
+                    'sentence_patterns': '句式内容',
+                    'vocabulary_traits': '词汇内容',
+                    'rhythm_principles': '节奏内容',
+                    'example_sentences': '例句内容',
+                },
+                'critic_injection': '',
+                'revise_injection': '',
+            }, f, allow_unicode=True)
+
+        self.engine = PerspectiveEngine('test-writer')
+
+    def tearDown(self):
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = self.original_builtin
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_inject_for_writer_adds_content_at_end(self):
+        """Writer 注入应该在末尾添加风格适配内容"""
+        original = "原始 prompt 内容\n原始 prompt 第二行"
+        result = self.engine.inject_for_writer(original, strength=0.8)
+
+        # Original content should be first (before injection)
+        self.assertTrue(result.index("原始 prompt 内容") < result.index("表达风格适配"))
+        self.assertIn("句式内容", result)
+        self.assertIn("词汇内容", result)
+        self.assertIn("节奏内容", result)
+        self.assertIn("例句内容", result)
+
+
+    def test_inject_for_writer_with_no_perspective_returns_original(self):
+        """没有加载视角时直接返回原始内容"""
+        engine = PerspectiveEngine()
+        original = "原始 prompt 内容"
+        result = engine.inject_for_writer(original)
+        self.assertEqual(result, original)
+
+    def test_writer_injection_strength_filters_content(self):
+        """根据强度正确过滤 Writer 注入内容"""
+        # Low strength (<= 0.3): no rhythm, no examples
+        result_low = self.engine.inject_for_writer("original", strength=0.3)
+        self.assertIn("句式内容", result_low)
+        self.assertIn("词汇内容", result_low)
+        self.assertNotIn("节奏内容", result_low)
+        self.assertNotIn("例句内容", result_low)
+
+        # Medium strength (<= 0.7): no examples
+        result_med = self.engine.inject_for_writer("original", strength=0.7)
+        self.assertIn("句式内容", result_med)
+        self.assertIn("词汇内容", result_med)
+        self.assertIn("节奏内容", result_med)
+        self.assertNotIn("例句内容", result_med)
+
+        # High strength (> 0.7): all content
+        result_high = self.engine.inject_for_writer("original", strength=0.8)
+        self.assertIn("句式内容", result_high)
+        self.assertIn("词汇内容", result_high)
+        self.assertIn("节奏内容", result_high)
+        self.assertIn("例句内容", result_high)
