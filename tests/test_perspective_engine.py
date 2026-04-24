@@ -286,3 +286,62 @@ class CriticReviseInjectionTests(unittest.TestCase):
 
         self.assertEqual(engine.inject_for_critic(original), original)
         self.assertEqual(engine.inject_for_revise(original), original)
+
+
+import sys
+from pathlib import Path
+
+# 确保能导入 utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+class LoadPromptIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_builtin = PerspectiveEngine.BUILTIN_PERSPECTIVES
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = Path(self.temp_dir)
+
+        # 创建测试视角
+        test_file = Path(self.temp_dir) / 'test-writer.yaml'
+        with open(test_file, 'w', encoding='utf-8') as f:
+            yaml.safe_dump({
+                'name': '测试作家',
+                'genre': '测试',
+                'description': '测试',
+                'strength_recommended': 0.7,
+                'strengths': [],
+                'weaknesses': [],
+                'planner_injection': {
+                    'mental_models': '心智模型',
+                    'worldview_principles': '世界观',
+                },
+                'writer_injection': {
+                    'sentence_patterns': '句式',
+                    'vocabulary_traits': '词汇',
+                    'rhythm_principles': '节奏',
+                    'example_sentences': '例句',
+                },
+                'critic_injection': '评审',
+                'revise_injection': '修改',
+            }, f, allow_unicode=True)
+
+    def tearDown(self):
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = self.original_builtin
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_load_prompt_with_perspective_injects_correctly(self):
+        """load_prompt 传入 perspective 时应该正确注入内容"""
+        from utils.file_utils import load_prompt
+
+        # 使用已有的 planner.md prompt 做测试
+        original = load_prompt('planner')
+
+        # 传入视角
+        result = load_prompt('planner', perspective='test-writer')
+
+        # 注入内容应该出现
+        self.assertIn("创作思维模式：测试作家", result)
+        self.assertIn("心智模型", result)
+        # 原始内容应该保留
+        self.assertTrue(len(result) > len(original))

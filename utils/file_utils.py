@@ -3,6 +3,7 @@ from config import PROMPTS_DIR, OUTPUTS_ROOT
 from utils.logger import logger
 from utils.runtime_context import get_current_output_dir as get_runtime_output_dir
 from utils.runtime_context import set_current_output_dir
+from core.perspective_engine import PerspectiveEngine
 
 
 def set_output_dir(novel_name: str) -> Path:
@@ -24,64 +25,82 @@ def get_current_output_dir() -> Path:
     return get_runtime_output_dir()
 
 
-def load_prompt(agent_name: str, content_type: str = None, context: dict = None) -> str:
+def load_prompt(agent_name: str, content_type: str = None, context: dict = None, perspective: str = None, perspective_strength: float = None) -> str:
     """
     从prompts文件夹加载对应Agent的提示词
     :param agent_name: Agent名称（planner/guardian/writer/editor/compliance）
     :param content_type: 内容类型（full_novel/short_story/script），如果有则加载特定prompt
     :param context: 占位符替换上下文，key 是占位符名称（不含 {{}}），value 是替换内容
+    :param perspective: 作家视角ID，若指定则注入对应视角内容
+    :param perspective_strength: 视角注入强度 (0.0-1.0)，默认使用视角推荐强度
     :return: 提示词内容
     """
+    # 第一步：加载基础提示词文件
+    content = None
+
     # 如果指定了内容类型且对应prompt存在，使用特定prompt
     if content_type:
         specific_prompt = PROMPTS_DIR / f"{agent_name}_{content_type}.md"
         if specific_prompt.exists():
             with open(specific_prompt, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-                if context:
-                    # 替换所有 {{key}} 占位符
-                    for key, value in context.items():
-                        content = content.replace(f"{{{{{key}}}}}", str(value))
-                return content
-        # 对于planner和writer，我们有专门的short_story和script版本
-        if agent_name == 'planner' and content_type == 'short_story':
+        # 对于planner和writer，我们有专门的short_story和script版本（向后兼容）
+        if content is None and agent_name == 'planner' and content_type == 'short_story':
             specific_prompt = PROMPTS_DIR / "planner_short_story.md"
             if specific_prompt.exists():
                 with open(specific_prompt, "r", encoding="utf-8") as f:
                     content = f.read().strip()
-                    if context:
-                        for key, value in context.items():
-                            content = content.replace(f"{{{{{key}}}}}", str(value))
-                    return content
-        if agent_name == 'planner' and content_type == 'script':
+        if content is None and agent_name == 'planner' and content_type == 'script':
             specific_prompt = PROMPTS_DIR / "planner_script.md"
             if specific_prompt.exists():
                 with open(specific_prompt, "r", encoding="utf-8") as f:
                     content = f.read().strip()
-                    if context:
-                        for key, value in context.items():
-                            content = content.replace(f"{{{{{key}}}}}", str(value))
-                    return content
-        if agent_name == 'writer' and content_type == 'script':
+        if content is None and agent_name == 'writer' and content_type == 'script':
             specific_prompt = PROMPTS_DIR / "writer_script.md"
             if specific_prompt.exists():
                 with open(specific_prompt, "r", encoding="utf-8") as f:
                     content = f.read().strip()
-                    if context:
-                        for key, value in context.items():
-                            content = content.replace(f"{{{{{key}}}}}", str(value))
-                    return content
-    # 默认加载通用prompt
-    prompt_file = PROMPTS_DIR / f"{agent_name}.md"
-    if not prompt_file.exists():
-        raise FileNotFoundError(f"提示词文件不存在：{prompt_file}")
-    with open(prompt_file, "r", encoding="utf-8") as f:
-        content = f.read().strip()
-        if context:
-            # 替换所有 {{key}} 占位符
-            for key, value in context.items():
-                content = content.replace(f"{{{{{key}}}}}", str(value))
-        return content
+
+    # 如果还没加载到内容，使用默认通用prompt
+    if content is None:
+        prompt_file = PROMPTS_DIR / f"{agent_name}.md"
+        if not prompt_file.exists():
+            raise FileNotFoundError(f"提示词文件不存在：{prompt_file}")
+        with open(prompt_file, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+
+    # 第二步：如果指定了视角，进行视角注入
+    if perspective:
+        try:
+            engine = PerspectiveEngine(perspective)
+            # 使用视角推荐强度如果没指定
+            strength = perspective_strength
+            if strength is None and engine.perspective_data and 'strength_recommended' in engine.perspective_data:
+                strength = engine.perspective_data['strength_recommended']
+            elif strength is None:
+                strength = 0.7
+
+            # 根据agent类型选择注入方法
+            if agent_name == 'planner':
+                content = engine.inject_for_planner(content, strength=strength)
+            elif agent_name == 'writer':
+                content = engine.inject_for_writer(content, strength=strength)
+            elif agent_name == 'critic':
+                content = engine.inject_for_critic(content, strength=strength)
+            elif agent_name == 'revise':
+                content = engine.inject_for_revise(content, strength=strength)
+            # 其他agent类型不支持注入，直接返回原内容
+        except Exception as e:
+            logger.warning(f"视角注入失败，使用原始prompt: {e}")
+
+    # 第三步：替换占位符
+    if context:
+        # 替换所有 {{key}} 占位符
+        for key, value in context.items():
+            content = content.replace(f"{{{{{key}}}}}", str(value))
+
+    # 返回最终内容
+    return content
 
 
 def save_output(content: str, filename: str, output_dir: Path = None) -> Path:
