@@ -51,6 +51,14 @@ type AgentCardConfig = {
   subtitle: string
 }
 
+type OverviewTab = 'workflow' | 'setup' | 'delivery'
+
+const overviewTabs: Array<{ key: OverviewTab; label: string; description: string }> = [
+  { key: 'workflow', label: '工作流', description: '当前进度、运行摘要和 Agent 状态' },
+  { key: 'setup', label: '创作配置', description: '需求、模式、协作者和维护操作' },
+  { key: 'delivery', label: '质量交付', description: '评分、导出、分享和 artifacts' },
+]
+
 const flowSteps: FlowStep[] = [
   {
     key: 'idea',
@@ -299,6 +307,8 @@ export const ProjectOverview: React.FC = () => {
   const [addingCollaborator, setAddingCollaborator] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [resetConfirmText, setResetConfirmText] = useState('')
+  const [activeTab, setActiveTab] = useState<OverviewTab>('workflow')
   const [editingConfig, setEditingConfig] = useState(false)
   const [cleaningStuck, setCleaningStuck] = useState(false)
   const [showCleanConfirm, setShowCleanConfirm] = useState(false)
@@ -389,6 +399,12 @@ export const ProjectOverview: React.FC = () => {
   const handleResetProject = async () => {
     if (!showResetConfirm) {
       setShowResetConfirm(true)
+      setResetConfirmText('')
+      return
+    }
+
+    if (resetConfirmText.trim() !== data?.name) {
+      showToast('请输入完整项目名后再重置', 'error')
       return
     }
 
@@ -398,6 +414,7 @@ export const ProjectOverview: React.FC = () => {
       showToast('项目已重置为草稿，所有生成内容已清除', 'success')
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       setShowResetConfirm(false)
+      setResetConfirmText('')
     } catch (error: unknown) {
       showToast(getErrorMessage(error, '重置失败'), 'error')
     } finally {
@@ -532,8 +549,8 @@ export const ProjectOverview: React.FC = () => {
   return (
     <Layout>
       <div className="mx-auto max-w-content space-y-6">
-        <Card className="overflow-hidden border-sage/20 bg-[linear-gradient(135deg,rgba(91,127,110,0.14),rgba(250,247,242,0.96),rgba(192,107,78,0.12))]">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <Card className="overflow-hidden border-sage/15 bg-white/50">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <Link to="/">
@@ -561,15 +578,15 @@ export const ProjectOverview: React.FC = () => {
               </div>
 
               {config?.core_hook && (
-                <div className="mt-5 rounded-comfortable border border-terracotta/15 bg-white/70 p-4 shadow-ambient">
+                <div className="mt-5 rounded-comfortable border border-terracotta/15 bg-parchment/55 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Hook</p>
                   <p className="mt-2 text-lg text-inkwell">{config.core_hook}</p>
                 </div>
               )}
             </div>
 
-            <div className="w-full max-w-md rounded-comfortable border border-white/70 bg-white/75 p-5 shadow-standard backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.24em] text-secondary">Current Run</p>
+            <div className="w-full max-w-lg rounded-comfortable border border-border bg-parchment/55 p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-secondary">Current Focus</p>
               <h2 className="mt-2 text-2xl">{runSummary.headline}</h2>
               <p className="mt-2 text-secondary">{runSummary.detail}</p>
 
@@ -578,18 +595,6 @@ export const ProjectOverview: React.FC = () => {
                   progress={workflowProgress}
                   message={data.current_generation_task?.current_step || `已完成 ${completedChapters}/${targetChapters || completedChapters || 1} 章`}
                 />
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                    <p className="text-secondary">章节进度</p>
-                    <p className="mt-1 text-lg text-inkwell">{completedChapters}/{targetChapters || '-'}</p>
-                  </div>
-                  <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                    <p className="text-secondary">质量总分</p>
-                    <p className="mt-1 text-lg text-inkwell">
-                      {data.overall_quality_score > 0 ? `${data.overall_quality_score.toFixed(1)}/10` : '待生成'}
-                    </p>
-                  </div>
-                </div>
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -605,12 +610,9 @@ export const ProjectOverview: React.FC = () => {
                 <Link to={`/projects/${projectId}/chapters`}>
                   <Button variant="secondary">查看章节</Button>
                 </Link>
-                <Link to={`/projects/${projectId}/analytics`}>
-                  <Button variant="secondary">质量分析</Button>
-                </Link>
                 {workflow && (
                   <Link to={`/projects/${projectId}/workflows/${workflow.id}`}>
-                    <Button variant="secondary">查看当前 Run</Button>
+                    <Button variant="tertiary">查看当前 Run</Button>
                   </Link>
                 )}
               </div>
@@ -622,7 +624,29 @@ export const ProjectOverview: React.FC = () => {
           <ProgressBar progress={exportProgress} message={exportStep || '导出中...'} />
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+        <div className="grid gap-3 rounded-comfortable border border-border bg-white/35 p-2 shadow-ambient md:grid-cols-3">
+          {overviewTabs.map(tab => {
+            const active = activeTab === tab.key
+
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`rounded-standard px-4 py-3 text-left transition-all ${
+                  active
+                    ? 'bg-white text-inkwell shadow-ambient'
+                    : 'text-secondary hover:bg-white/50 hover:text-inkwell'
+                }`}
+              >
+                <span className="block font-sans text-sm font-medium">{tab.label}</span>
+                <span className="mt-1 block text-xs leading-relaxed">{tab.description}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className={`${activeTab === 'workflow' ? 'grid' : 'hidden'} gap-6 xl:grid-cols-[1.3fr_0.9fr]`}>
           <Card>
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -698,29 +722,46 @@ export const ProjectOverview: React.FC = () => {
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-4">
+        <Card className={`${activeTab === 'workflow' ? 'block' : 'hidden'} p-5`}>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Agent Strip</p>
+              <h2 className="mt-2 text-2xl">智能体状态</h2>
+            </div>
+            <Badge variant="secondary">按需展开到 Workflow Run</Badge>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
           {agentCards.map(agent => {
             const state = agentStates[agent.key]
 
             return (
-              <Card key={agent.key} className="h-full">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-secondary">Agent</p>
-                    <h3 className="mt-2 text-xl">{agent.title}</h3>
-                  </div>
+              <div
+                key={agent.key}
+                className={`rounded-standard border px-4 py-3 ${
+                  state === 'running'
+                    ? 'border-sage/35 bg-sage/10'
+                    : state === 'done'
+                      ? 'border-sage/20 bg-white/70'
+                      : state === 'error'
+                        ? 'border-terracotta/30 bg-terracotta/5'
+                        : 'border-border bg-parchment/45'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-sans text-sm font-medium text-inkwell">{agent.title}</span>
                   <Badge variant={getAgentBadgeVariant(state)}>
-                    {state === 'done' ? 'done' : state === 'running' ? 'running' : 'idle'}
+                    {state === 'done' ? 'done' : state === 'running' ? 'running' : state === 'error' ? 'error' : 'idle'}
                   </Badge>
                 </div>
-                <p className="mt-4 text-secondary">{agent.subtitle}</p>
-              </Card>
+                <p className="mt-2 text-sm text-secondary">{agent.subtitle}</p>
+              </div>
             )
           })}
-        </div>
+          </div>
+        </Card>
 
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <Card>
+        <div className={`${activeTab === 'setup' || activeTab === 'delivery' ? 'grid' : 'hidden'} gap-6 xl:grid-cols-[1.1fr_0.9fr]`}>
+          <Card className={activeTab === 'setup' ? '' : 'hidden'}>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.22em] text-secondary">Project Setup</p>
@@ -855,7 +896,7 @@ export const ProjectOverview: React.FC = () => {
             )}
           </Card>
 
-          <div className="space-y-6">
+          <div className={activeTab === 'delivery' ? 'space-y-6' : 'hidden'}>
             <Card>
               <p className="text-xs uppercase tracking-[0.22em] text-secondary">Quality</p>
               <h2 className="mt-2 text-2xl">质量与交付</h2>
@@ -971,7 +1012,7 @@ export const ProjectOverview: React.FC = () => {
           </div>
         </div>
 
-        {isOwner && (
+        {isOwner && activeTab === 'setup' && (
           <Card>
             <p className="text-xs uppercase tracking-[0.22em] text-secondary">Team</p>
             <h2 className="mt-2 text-2xl">协作者</h2>
@@ -1017,8 +1058,8 @@ export const ProjectOverview: React.FC = () => {
           </Card>
         )}
 
-        {showCleanConfirm && (
-          <div className="rounded-standard border border-amber-300 bg-amber-50 p-4">
+        {showCleanConfirm && activeTab === 'delivery' && (
+          <div className="rounded-standard border border-muted-gold/35 bg-muted-gold/10 p-4">
             <p className="text-sm text-body">
               <strong>确认清理任务队列吗？</strong> 这会将所有未完成的任务标记为失败，但不会删除已经生成的章节内容。
             </p>
@@ -1034,25 +1075,43 @@ export const ProjectOverview: React.FC = () => {
         )}
 
         {showResetConfirm && (
-          <div className="rounded-standard border border-red-300 bg-red-50 p-4">
+          <div className="rounded-standard border border-terracotta/25 bg-terracotta/5 p-4">
             <p className="text-sm text-body">
-              <strong>确认重置项目吗？</strong> 这会删除所有已生成章节和任务记录，项目将回到草稿状态。
+              <strong>确认重置项目吗？</strong> 这会删除所有已生成章节和任务记录，项目将回到草稿状态。请输入完整项目名后再确认。
             </p>
+            <div className="mt-3">
+              <Input
+                label={`输入项目名：${data.name}`}
+                value={resetConfirmText}
+                onChange={event => setResetConfirmText(event.target.value)}
+              />
+            </div>
             <div className="mt-3 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setShowResetConfirm(false)} disabled={resetting}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowResetConfirm(false)
+                  setResetConfirmText('')
+                }}
+                disabled={resetting}
+              >
                 取消
               </Button>
-              <Button variant="secondary" onClick={handleResetProject} disabled={resetting}>
+              <Button
+                variant="secondary"
+                onClick={handleResetProject}
+                disabled={resetting || resetConfirmText.trim() !== data.name}
+              >
                 {resetting ? '重置中...' : '确认重置'}
               </Button>
             </div>
           </div>
         )}
 
-        {data.status !== 'draft' && (
+        {data.status !== 'draft' && activeTab === 'setup' && (
           <div className="flex justify-end">
             <Button variant="tertiary" onClick={handleResetProject}>
-              重置项目
+              展开重置确认
             </Button>
           </div>
         )}

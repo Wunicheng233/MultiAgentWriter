@@ -14,9 +14,9 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ progress, message }) =
           <span>{Math.round(progress)}%</span>
         </div>
       )}
-      <div className="w-full h-2 bg-border rounded-full overflow-hidden">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/70">
         <div
-          className="h-full bg-terracotta transition-all duration-300 ease-out"
+          className="h-full rounded-full bg-sage transition-all duration-300 ease-out"
           style={{ width: `${progress}%` }}
         />
       </div>
