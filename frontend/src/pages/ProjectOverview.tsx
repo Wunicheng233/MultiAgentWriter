@@ -1074,7 +1074,7 @@ export const ProjectOverview: React.FC = () => {
           </div>
         )}
 
-        {showResetConfirm && (
+        {showResetConfirm && activeTab === 'setup' && (
           <div className="rounded-standard border border-terracotta/25 bg-terracotta/5 p-4">
             <p className="text-sm text-body">
               <strong>确认重置项目吗？</strong> 这会删除所有已生成章节和任务记录，项目将回到草稿状态。请输入完整项目名后再确认。

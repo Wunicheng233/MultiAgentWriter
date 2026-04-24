@@ -6,18 +6,22 @@ interface ProgressBarProps {
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({ progress, message }) => {
+  const safeProgress = Number.isFinite(progress)
+    ? Math.min(Math.max(progress, 0), 100)
+    : 0
+
   return (
     <div className="w-full space-y-2">
       {message && (
         <div className="flex justify-between text-sm text-secondary">
           <span>{message}</span>
-          <span>{Math.round(progress)}%</span>
+          <span>{Math.round(safeProgress)}%</span>
         </div>
       )}
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border/70">
         <div
           className="h-full rounded-full bg-sage transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
+          style={{ width: `${safeProgress}%` }}
         />
       </div>
     </div>

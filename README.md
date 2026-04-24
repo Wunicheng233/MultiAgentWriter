@@ -1,333 +1,548 @@
-# 📖 Writer - Multi-Agent 小说创作系统
+<div align="center">
 
-这是一个正在演进中的 **Multi-Agent 小说创作系统**。当前版本已经具备前端工作台、FastAPI 后端、Celery 异步生成、多角色 Agent 编排、章节编辑、导出、分享、质量评审、局部修复和过程可视化能力。
+<!-- Hero Section -->
+<br />
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" alt="StoryForge AI" width="120" height="120" />
 
-> 当前真实状态：系统核心仍由 `orchestrator` 驱动，但主链路已经升级为质量优先的 workflow v2：Chapter 仍是叙事主单位，scene/span 只作为规划、诊断、定位和局部修复单位。系统会记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、`FeedbackItem`、`AgentContract`、`evaluation_harness` 和 workflow-v2 事件，方便在前端回放生成过程。
+# StoryForge AI
 
-> **部署说明**: 本项目采用前后端分离架构，需要后端提供API服务。
-> 
-> 如果你只是想体验UI，前端可以编译为静态文件部署到 GitHub Pages / Vercel 等免费托管服务。完整功能需要后端配合。
-> 
-> 比赛展示可以参考下方「免费部署方案」将前后端都部署到免费平台，评委可以直接在线体验。
+### 多智能体协作小说创作系统
 
-## ✨ 功能特点
+**让 AI 成为你的专业创作团队——策划、写作、评审、修订，各司其职**
 
-- 🤖 **多角色创作链路** - Planner 负责策划与 scene anchors，Writer 连续生成整章，Critic v2 负责结构化诊断，Revise 负责局部修复
-- 🧭 **工作流与工件追踪** - 记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、结构化反馈、章节评审报告和 workflow-v2 事件
-- 🧪 **Evaluation Harness 基座** - Critic v2 结果会标准化为章节评审报告，并沉淀为可版本化工件
-- 🛡️ **系统层 Guardrails** - 在 Critic 前执行纯代码格式/标题/段落/字数等基础检查
-- 🧩 **局部修复 + Stitching** - 问题定位到 scene/span 后只替换目标片段，并强制执行过渡、代词、情绪和语气拼接检查
-- 🌍 **世界观与上下文管理** - Worldview Manager、NovelState 与向量检索共同支撑跨章节衔接
-- 👀 **过程可视化** - 项目概览和 Workflow 详情页展示 Context Assembler、Critic v2、Failure Router、Local Revise、Stitching、NovelState 更新等真实过程
-- 🔍 **向量语义检索** - ChromaDB存储相关历史内容，保证剧情连贯性
-- ✅ **质量控制闭环** - Critic 打分、问题清单、修订循环和质量分析面板
-- 📱 **移动端友好阅读** - 自动短段落排版，适配手机阅读
-- 📦 **多格式导出** - 支持 EPUB / DOCX / HTML 三种格式导出
-- 📜 **章节版本历史** - 每次保存自动创建版本，支持一键回滚
-- 🧮 **Token用量统计** - 自动统计每个项目的Token消耗和预估成本
-- 🔗 **只读分享链接** - 创建公开分享链接，无需登录即可阅读
-- 👥 **项目协作** - 支持添加协作者，共同浏览项目
-- 🤝 **可选人机交互确认** - 支持策划方案确认和每章生成确认，你可以掌控创作方向
+<br />
 
-## 🏗️ 当前系统架构
+<!-- Badge Grid -->
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19" />
+  <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" alt="FastAPI" />
+</p>
 
-当前采用**前后端分离 + 异步任务队列 + 文件/数据库混合持久化**架构。长期目标是让数据库中的工作流与 Artifact 成为主事实源，文件系统逐步变为派生工件和兼容桥。
+<p align="center">
+  <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Celery-37814A?style=for-the-badge&logo=celery&logoColor=white" alt="Celery" />
+  <img src="https://img.shields.io/badge/Chroma-4B32C3?style=for-the-badge&logo=chroma&logoColor=white" alt="ChromaDB" />
+</p>
+
+<p align="center">
+  <a href="#-核心特性"><strong>核心特性</strong></a> ·
+  <a href="#-系统架构"><strong>架构概览</strong></a> ·
+  <a href="#-快速开始"><strong>快速开始</strong></a> ·
+  <a href="#-工作流程"><strong>工作流程</strong></a>
+</p>
+
+<br />
+
+<!-- Visual Divider -->
+<img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="100%" alt="divider" />
+
+</div>
+
+<br />
+
+<!-- ## ✨ 为什么选择 StoryForge? -->
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🎯 专业创作团队，一人成团
+
+不再是单一的 AI 写作工具。StoryForge 为你配备了一整个**专业创作团队**：
+
+- **策划编辑** → 设定世界观、人物、分章大纲
+- **专职作家** → 流畅生成完整章节内容
+- **质量评审** → 多维度结构化诊断打分
+- **修订专家** → 精准定位问题，局部修复
+
+</td>
+<td width="50%" valign="top">
+
+### 🧠 记忆连贯，永不遗忘
+
+AI 写作最头疼的问题？写着写着就忘了人物设定和剧情伏笔。
+
+- **NovelState 动态状态追踪** → 角色、时间线、伏笔、文风实时更新
+- **向量语义检索** → 自动关联前文内容，保证连贯性
+- **世界管理系统** → 世界观规则统一，不前后矛盾
+
+</td>
+</tr>
+</table>
+
+<br />
+
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
+
+<br />
+
+## 🚀 核心特性
+
+<div align="center">
+<table>
+<tr>
+<td align="center" width="25%">
+<br />
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
+
+### 多 Agent 协作
+Planner → Writer → Critic → Revise
+<br />
+各司其职，质量可控
+<br />
+<br />
+</td>
+<td align="center" width="25%">
+<br />
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
+
+### 人机共创
+支持策划和章节级确认
+<br />
+你掌控方向，AI 负责执行
+<br />
+<br />
+</td>
+<td align="center" width="25%">
+<br />
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
+
+### 结构化评审
+Critic v2 多维度打分
+<br />
+问题定位到 scene/span 级别
+<br />
+<br />
+</td>
+<td align="center" width="25%">
+<br />
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
+
+### 局部智能修复
+只修改有问题的片段
+<br />
+Stitching 保证过渡自然
+<br />
+<br />
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center" width="20%">
+<strong>📊 质量分析面板</strong><br />
+雷达图 + 评分趋势
+</td>
+<td align="center" width="20%">
+<strong>📦 多格式导出</strong><br />
+EPUB / DOCX / HTML
+</td>
+<td align="center" width="20%">
+<strong>🔗 只读分享</strong><br />
+公开链接，无需登录
+</td>
+<td align="center" width="20%">
+<strong>📜 版本历史</strong><br />
+自动保存，一键回滚
+</td>
+<td align="center" width="20%">
+<strong>👥 协作支持</strong><br />
+协作者共同浏览
+</td>
+</tr>
+</table>
+</div>
+
+<br />
+
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
+
+<br />
+
+## 🏗️ 系统架构
+
+```mermaid
+flowchart TD
+    subgraph Frontend["React 19 + TypeScript 前端"]
+        direction LR
+        A[ProjectOverview<br />项目指挥中心]
+        B[Editor<br />写作工作台]
+        C[Reader<br />沉浸式阅读]
+        D[QualityDashboard<br />质量分析]
+        E[ChapterList<br />章节管理]
+    end
+
+    subgraph Backend["FastAPI 后端服务层"]
+        direction LR
+        F[RESTful API]
+        G[Workflow Service]
+        H[Evaluation Sync]
+        I[Export Service]
+    end
+
+    subgraph Core["编排核心层"]
+        direction LR
+        J[Orchestrator<br />主编排器]
+        K[NovelState<br />动态状态管理]
+        L[Worldview Manager<br />世界观追踪]
+        M[Evaluation Harness<br />标准化评审]
+        N[System Guardrails<br />零Token格式检查]
+    end
+
+    subgraph Agents["多 Agent 协作层"]
+        direction LR
+        O[Planner<br />策划编辑]
+        P[Context Assembler<br />上下文装配]
+        Q[Writer<br />专职作家]
+        R[Critic v2<br />质量评审]
+        S[Failure Router<br />修复决策]
+        T[Revise<br />局部修订]
+        U[Stitching Pass<br />连贯检查]
+    end
+
+    subgraph Persistence["持久化层"]
+        direction LR
+        V[(PostgreSQL<br />业务数据)]
+        W[ChromaDB<br />向量检索]
+        X[Redis<br />任务队列]
+        Y[File System<br />工件导出]
+    end
+
+    User((👤 用户)) --> Frontend
+    Frontend --> Backend
+    Backend --> Core
+    Core --> Agents
+    Agents --> Core
+    Core --> Persistence
+    Persistence --> Core
+```
+
+### 📁 项目结构
 
 ```
-writer/
-├── backend/                # FastAPI 后端 RESTful API
-│   ├── api/                # API 端点（认证/项目/章节/任务/分享）
-│   ├── models.py           # SQLAlchemy ORM 数据模型
-│   ├── workflow_service.py # 工作流、工件、反馈服务
-│   └── evaluation_sync.py  # harness 评审报告落库同步
-├── frontend/               # React + TypeScript 前端
-│   └── src/
-│       ├── pages/          # 页面组件（登录/项目列表/编辑器/分析等）
-│       └── utils/          # API 封装和工具
-├── agents/                 # 当前启用的 Agent 函数
-│   ├── planner_agent.py    # 小说策划
-│   ├── writer_agent.py     # 章节生成
-│   ├── critic_agent.py     # 章节评审
-│   └── revise_agent.py     # 根据问题清单修订
-├── core/
-│   ├── config.py           # 配置中心（pydantic-settings）
-│   ├── orchestrator.py     # 主编排器
-│   ├── agent_contract.py   # Agent 契约定义
-│   ├── evaluation_harness.py # 章节评审标准化基座
-│   ├── workflow_optimization.py # scene anchors、Critic v2、局部修复和 stitching 工具
-│   ├── novel_state_service.py # 项目内 NovelState 动态状态层
-│   └── worldview_manager.py # 世界观状态管理
-├── tasks/                  # Celery 异步任务
-│   ├── writing_tasks.py    # 小说生成任务
-│   └── export_tasks.py     # 导出任务
-├── services/               # 业务服务层
-│   └── export_service.py   # 多格式导出服务
-├── prompts/                # 各 Agent 提示词模板
-├── utils/                  # 工具函数
-│   ├── volc_engine.py      # 火山引擎 API 客户端（自动记录 Token）
-│   └── vector_db.py        # ChromaDB 向量检索
-├── alembic/                # 数据库迁移
-├── main.py                 # CLI 入口（也可直接生成）
-└── requirements.txt        # Python 依赖
+storyforge-ai/
+├── 📁 frontend/               # React + TypeScript + Vite
+│   ├── 📁 src/pages/         # 页面组件
+│   │   ├── ProjectOverview   # 项目指挥中心
+│   │   ├── Editor            # 写作工作台
+│   │   ├── Reader            # 沉浸式阅读
+│   │   └── QualityDashboard  # 质量分析面板
+│   └── 📁 components/        # 可复用UI组件
+│
+├── 📁 backend/               # FastAPI 后端
+│   ├── 📁 api/              # RESTful API 端点
+│   ├── models.py            # SQLAlchemy ORM 模型
+│   └── workflow_service.py  # 工作流服务
+│
+├── 📁 core/                 # 编排核心
+│   ├── orchestrator.py      # 主编排器 (67KB)
+│   ├── evaluation_harness.py # 评审标准化
+│   ├── novel_state_service.py # 动态状态追踪
+│   ├── workflow_optimization.py # v2 智能修复
+│   └── system_guardrails.py # 零Token格式检查
+│
+├── 📁 agents/               # 多 Agent 实现
+│   ├── planner_agent.py
+│   ├── writer_agent.py
+│   ├── critic_agent.py
+│   └── revise_agent.py
+│
+├── 📁 tasks/                # Celery 异步任务
+│   ├── writing_tasks.py
+│   └── export_tasks.py
+│
+└── 📁 utils/                # 基础设施
+    ├── volc_engine.py       # 火山引擎 API 客户端
+    └── vector_db.py         # ChromaDB 向量检索
 ```
+
+<br />
+
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
+
+<br />
+
+## 🔄 创作工作流
+
+```mermaid
+flowchart TD
+    Start([👤 用户提交需求]) --> Planner
+
+    Planner[Planner<br />生成设定圣经<br />与 scene anchors] --> |存入向量库| Loop
+
+    subgraph Loop[逐章生成循环]
+        direction TB
+        Context[Context Assembler<br />装配章节上下文]
+        Writer[Writer<br />连续生成整章]
+        Guardrails[System Guardrails<br />零 Token 格式检查]
+        Critic[Critic v2<br />多维度结构化评审]
+
+        Context --> Writer
+        Writer --> Guardrails
+        Guardrails --> Critic
+    end
+
+    Critic --> Pass{通过质量门槛?}
+
+    Pass -->|✅ 是| Next[保存章节<br />更新 NovelState<br />记录 Artifact]
+    Pass -->|❌ 否| Failure[Failure Router<br />诊断问题类型]
+
+    Failure -->|局部问题| Revise[Local Revise<br />只修改目标片段]
+    Failure -->|连贯问题| Stitch[Stitching Pass<br />过渡/指代/情绪修复]
+    Failure -->|严重问题| Rewrite[整章轻量重写]
+
+    Revise --> Guardrails
+    Stitch --> Guardrails
+    Rewrite --> Guardrails
+
+    Next --> More{还有章节?}
+    More -->|是| Context
+    More -->|否| Done([🎉 创作完成<br />可导出/分享])
+
+    style Planner fill:#e8f5e9,stroke:#43a047,color:#1b5e20
+    style Writer fill:#e3f2fd,stroke:#1976d2,color:#0d47a1
+    style Critic fill:#fff3e0,stroke:#f57c00,color:#e65100
+    style Revise fill:#fce4ec,stroke:#c2185b,color:#880e4f
+```
+
+### 📋 v2 工作流核心原则
+
+| 原则 | 说明 |
+|------|------|
+| **章节为单位** | Chapter 是最终叙事单位，不拆成互不连贯的小作文 |
+| **精确诊断** | Scene/span 只用于规划、诊断、定位和局部修复 |
+| **强制衔接** | 局部修复必须携带前后邻接段，修后经 stitching 检查 |
+| **渐进升级** | 连续两轮局部修复失败时，才升级为整章重写 |
+
+---
+
+### 📦 核心 Artifact 类型
+
+| Artifact | 作用 |
+|----------|------|
+| `scene_anchor_plan` | 本章剧情路标、冲突、角色动机、状态变化、结尾钩子 |
+| `chapter_critique_v2` | Critic v2 结构化诊断，含问题维度、证据、严重度、修复指令 |
+| `repair_trace` | 局部修复批次、修复策略、替换范围、收益记录 |
+| `stitching_report` | 过渡、代词、时间、情绪、语气连贯性检查结果 |
+| `novel_state_snapshot` | 章节写前/写后的动态状态快照 |
+
+<br />
+
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
+
+<br />
 
 ## 🚀 快速开始
 
-### 1. 环境准备
+### 📋 前置要求
 
-需要预先安装：
-- Python 3.10+
-- Node.js 16+
-- PostgreSQL 12+
-- Redis
+| 依赖 | 版本要求 |
+|------|---------|
+| Python | ≥ 3.10 |
+| Node.js | ≥ 16 |
+| PostgreSQL | ≥ 12 |
+| Redis | ≥ 6 |
 
-**在 macOS 上安装（Homebrew）：**
+---
+
+### 1️⃣ 一键环境安装 (macOS)
+
 ```bash
-# 安装 PostgreSQL
-brew install postgresql@14
+brew install postgresql@14 redis
 brew services start postgresql
-
-# 安装 Redis
-brew install redis
 brew services start redis
 ```
 
-**在 Ubuntu/Debian 上安装：**
-```bash
-# 安装 PostgreSQL
-sudo apt update
-sudo apt install postgresql postgresql-contrib redis-server
-sudo systemctl start postgresql
-sudo systemctl start redis
-```
-
-**在 Windows 上：**
-- 下载安装 [PostgreSQL](https://www.postgresql.org/download/windows/)
-- 下载安装 [Redis](https://github.com/microsoftarchive/redis/releases) 或使用 WSL2 安装
-- 推荐使用 WSL2 运行，体验更好
-
-**不限制平台：** 理论上支持 macOS / Linux / Windows（WSL2），只要能运行 Python/Node.js/PostgreSQL/Redis 即可。
-
-### 2. 安装依赖
+### 2️⃣ 依赖安装
 
 ```bash
-# 创建虚拟环境
-conda create -n novel_agent python=3.10
-conda activate novel_agent
+# Python 虚拟环境
+conda create -n storyforge python=3.10
+conda activate storyforge
 
-# 安装 Python 依赖
+# 后端依赖
 pip install -r requirements.txt
 
-# 安装前端依赖
-cd frontend
-npm install
-cd ..
+# 前端依赖
+cd frontend && npm install && cd ..
 ```
 
-### 3. 配置环境变量
+### 3️⃣ 环境配置
 
 编辑 `.env` 文件：
+
 ```env
 # ========== API Key（必需）==========
 WRITER_API_KEY=your-volcano-engine-api-key-here
 
-# ========== 数据库（默认本地开发可不用改）==========
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mutiagent_writer
+# ========== 数据库（本地开发可不用改）==========
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/storyforge
 
-# ========== Redis（默认本地开发可不用改）==========
+# ========== Redis（本地开发可不用改）==========
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
-### 4. 初始化数据库
+### 4️⃣ 数据库初始化
 
 ```bash
-# 创建数据库
-createdb mutiagent_writer
-
-# 运行迁移建表
+createdb storyforge
 alembic upgrade head
 ```
 
-### 5. 启动所有服务
+### 5️⃣ 启动所有服务
 
-**❗ 重要：需要同时打开 3 个终端窗口，都激活你的 Python 虚拟环境：**
+> **需要 3 个终端窗口，都激活虚拟环境**
 
-| 终端 | 作用 | 启动命令 |
+| 终端 | 服务 | 启动命令 |
 |------|------|----------|
-| **终端 1** | FastAPI 后端服务（处理HTTP请求） | ```bash\nconda activate novel_agent\ncd /path/to/writer\nuvicorn backend.main:app --reload --host 0.0.0.0 --port 8000\n``` |
-| **终端 2** | Celery Worker（异步处理AI生成任务） | ```bash\nconda activate novel_agent\ncd /path/to/writer\ncelery -A celery_app worker --loglevel=info\n``` |
-| **终端 3** | Vite 前端开发服务器 | ```bash\nconda activate novel_agent\ncd /path/to/writer/frontend\nnpm run dev\n``` |
+| **1** | FastAPI 后端 | `uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000` |
+| **2** | Celery Worker | `celery -A celery_app worker --loglevel=info` |
+| **3** | Vite 前端 | `cd frontend && npm run dev` |
 
-**为什么需要 3 个终端？**
-- FastAPI 负责处理网页 API 请求
-- Celery Worker 负责在后台运行耗时的AI生成任务，不会阻塞网页响应
-- Vite 提供前端热重载开发服务
+### 6️⃣ 开始创作
 
-三者都必须运行，系统才能正常工作！
+访问 `http://localhost:5173` → 注册账号 → 创建项目 → 开始生成
 
-### 6. 使用系统
+<br />
 
-打开浏览器访问：`http://localhost:5173`
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
 
-1. 注册新用户账号
-2. 在设置页面填入你的火山引擎 API Key；如果服务器已经配置统一 Key，也可以不填自定义 Key
-3. 登录后点击"创建新项目"
-4. 填写小说需求：
-   - **跳过策划确认**: 开启后自动通过策划方案，不需要人工确认
-   - **跳过章节确认**: 开启后自动生成所有章节，不需要逐章确认
-   - *如果两个都关闭*，系统会在生成完策划方案后停下来，等待你审阅确认，确认通过后才会开始生成正文
-5. 点击"开始生成"，生成在后台异步运行
-6. 刷新页面查看进度，当等待你确认时，会弹出确认对话框：
-   - 可以预览策划方案或已生成章节（Markdown 自动渲染，包括表格）
-   - 选择"通过，继续生成" → 系统继续生成下一步
-   - 填写修改意见后选择"不通过，按修改意见重新优化" → AI 根据你的反馈重新修改
-7. 全部生成完成后可以：
-   - 阅读/编辑章节
-   - 查看质量分析（总体评分、雷达图、章节评分趋势）
-   - 导出 EPUB/DOCX/HTML
-   - 创建分享链接
-   - 添加协作者
+<br />
 
----
+## 🤖 Agent 团队
 
-## 📊 当前工作流程
+<table>
+<tr>
+<td width="14%" align="center">
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
 
-```
-用户需求加载
-    ↓
-Planner → 生成设定圣经、章节大纲、scene anchors → 存入向量数据库
-    ↓
-对每一章：
-  1. Context Assembler 装配章节目标、scene anchors、前文摘要、设定、NovelState 和风格约束
-  ↓
-  2. Writer 连续生成完整章节，scene anchors 只作为内部路标
-  ↓
-  3. system_guardrails 执行标题/格式/字数/段落等基础检查
-  ↓
-  4. Critic v2 生成结构化诊断，问题定位到 scene/span
-  ↓
-  5. 未通过时 Failure Router 选择修复策略，Local Revise 只替换目标片段
-  ↓
-  6. Stitching Pass 修复过渡、指代、时间跳跃、情绪断裂和语气不一致
-  ↓
-  7. evaluation_harness 标准化评审结果，写入 info.json，并同步为 Artifact
-  ↓
-  8. 保存章节 → 更新 NovelState → 同步数据库 → 记录 chapter_draft / chapter_evaluation / workflow-v2 工件
-  ↓
-所有章节完成 → 可导出多种格式
-```
+### Planner
+策划编辑
+</td>
+<td width="86%">
+生成小说整体策划、设定圣经、分章大纲、scene anchors
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
 
-workflow v2 的关键原则：
-- Chapter 仍是最终叙事单位，避免把章节拆成互不连贯的小作文。
-- Scene/span 只用于规划、诊断、定位和局部修复。
-- 局部修复必须携带前后邻接段，修后必须经过 chapter-level stitching。
-- 连续两轮局部修复仍失败时，才升级为整章轻量重写。
+### Writer
+专职作家
+</td>
+<td>
+连续生成完整章节，按 scene anchors 推进但不拆段独立生成
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
 
-主要 Artifact 类型：
-- `scene_anchor_plan`：本章剧情路标、冲突、角色动机、状态变化和结尾钩子。
-- `chapter_critique_v2`：Critic v2 结构化诊断，包含问题维度、证据片段、严重度和修复指令。
-- `repair_trace`：局部修复批次、修复策略、替换范围和收益记录。
-- `stitching_report`：过渡、代词、时间、情绪和语气连贯性检查结果。
-- `novel_state_snapshot`：章节写前/写后的角色、时间线、伏笔和文风动态状态快照。
+### Critic v2
+质量评审
+</td>
+<td>
+多维度章节评审、打分、输出定位到 scene/span 的结构化问题清单
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
 
----
+### Revise
+修订专家
+</td>
+<td>
+根据 Critic 或用户反馈，执行局部片段精准修复
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="https://user-images.githubusercontent.com/97361651/210085073-83e6277e-8c3a-4501-a6d7-b2854f371156.svg" width="48" />
 
-## 🎯 新功能详解
+### NovelState
+状态记忆
+</td>
+<td>
+追踪角色、时间线、伏笔、文风和世界观动态事实，永不遗忘
+</td>
+</tr>
+</table>
 
-### 1. 多格式导出
-- **EPUB**: 可用于电子书阅读器
-- **DOCX**: 可用于 Word/Pages 编辑
-- **HTML**: 静态网页打包，适合分享
+<br />
 
-### 2. 章节版本历史
-- 每次保存章节自动创建新版本
-- 保留最近 10 个版本
-- 在编辑器侧边栏可查看历史、预览、恢复任何版本
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
 
-### 3. Token 使用量统计
-- 每次 LLM 调用自动记录 Token 消耗
-- 项目概览显示总 Token 和预估美元成本
-- 设置页面显示用户月度统计
+<br />
 
-### 4. 只读分享链接
-- 项目所有者可创建公开分享链接
-- 任何人打开链接都可以阅读，无需登录
-- 纯只读，无法编辑
+## 📊 项目健康度
 
-### 5. 项目协作
-- 项目所有者可以通过用户名添加协作者
-- 协作者有只读权限，可以查看项目和章节
-- 随时可以移除协作者
+> **审计日期：2026-04-24**
 
-### 6. 人机交互确认模式（开发中）
-
-> ⚠️ **当前状态**: 功能正在完善中，可能存在交互问题。稳定使用建议勾选"跳过策划确认"和"跳过章节确认"开启全自动模式。
-
-开启方式：创建项目时关闭"跳过策划确认"和"跳过章节确认"
-
-计划工作流程：
-1. AI 生成完策划方案 → 弹出确认对话框 → 你预览 → 确认通过 / 修改后重新生成
-2. AI 生成完每一章 → 弹出确认对话框 → 你预览 → 确认通过 / 修改后重新优化
-3. 完全掌控创作方向，不满意可以随时调整
-
-适合：
-- 对小说要求高，想要亲自把关每一步
-- 初次创作，不确定方向，需要逐步调整
-- 重要作品，不想完全全自动
-
-全自动模式（推荐稳定使用）：创建项目时勾选"跳过策划确认"和"跳过章节确认"，系统会全自动生成所有章节。
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| 核心业务逻辑 | 9/10 | 完整、可运行、架构设计优秀 |
+| 代码质量 | 7/10 | 存在少量重复，个别文件过大 |
+| 测试覆盖 | 6/10 | 新功能有测试，核心流程待加强 |
+| 架构前瞻性 | 9/10 | DB 模型超前，为扩展预留空间 |
+| **总体健康度** | **7.8/10** | 🟢 优秀的 AI 写作产品原型 |
 
 ---
 
-## 🔧 配置参数
+### 📝 已知优化点
 
-所有可配置参数都在 `core/config.py`：
+- [ ] ProjectOverview 信息密度过高，需改为标签页架构
+- [ ] Editor 专注模式，提升写作空间占比
+- [ ] Agent 状态 UI 组件统一
+- [ ] orchestrator.py 模块拆分
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `MAX_FIX_RETRIES` | 初稿修复最多重试轮数 | 4 |
-| `MAX_PARALLEL_CHECKS` | 并行检查最大线程数 | 3 |
-| `WORD_COUNT_DEVIATION_ALLOWED` | 允许字数偏差比例 | 0.15 |
-| `LONG_PARAGRAPH_THRESHOLD` | 长段落判断阈值（字符） | 300 |
-| `AI_CLICHE_REPEAT_THRESHOLD` | AI 套话多少次算重复 | 2 |
-| `VECTOR_CHUNK_SIZE` | 向量数据库分块大小 | 500 |
-| `CRITIC_PASS_SCORE` | Critic 及格线 | 8 |
+详见：`plan/05-UI-UX-Optimization-Report.md`
 
-> 注：部分历史配置项仍保留在配置文件中，当前主链路以 Planner / Context Assembler / Writer / Guardrails / Critic v2 / Failure Router / Local Revise / Stitching / Evaluation Harness / NovelState 为准。
+<br />
 
----
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/97361651/210085587-2f90366f-90a6-4d9a-8b7c-9c3d7f8e4b5a.svg" width="80%" alt="divider" />
+</div>
 
-## 🧑‍💼 Agent 职责分工
-
-| Agent | 职责 |
-|-------|------|
-| Planner | 生成小说整体策划大纲 |
-| Context Assembler | 汇总章节目标、scene anchors、前文、设定、风格和 NovelState |
-| Writer | 连续生成完整章节，按 scene anchors 推进但不拆段独立生成 |
-| Critic v2 | 章节评审、打分、输出定位到 scene/span 的结构化问题 |
-| Failure Router | 根据问题类型选择局部修复、stitching 或整章轻量重写 |
-| Revise | 根据 Critic 或用户反馈执行局部片段修复 |
-| Stitching Pass | 修复过渡、指代、时间跳跃、情绪断裂和语气不一致 |
-| Evaluation Harness | 标准化 Critic 输出，沉淀可追踪评审报告 |
-| NovelState / Worldview Manager | 追踪角色、时间线、伏笔、文风和世界观动态事实 |
-
-## 🧹 Git 与运行时产物
-
-`data/projects/**/chapters/`、`data/projects/**/info.json`、`data/projects/**/novel_state.json` 等是本地生成产物，已加入 `.gitignore`。仓库保留需求、大纲和设定等可复用输入文件；实际生成的章节、评分快照和动态状态留在本机，避免每次试跑都产生无关提交。
-
----
-
-## 📝 说明
-
-- 所有 Agent 的 API Key 都使用火山引擎方舟平台
-- 默认配置使用统一 API Key，简单方便
-- 需要自己准备火山引擎账号和 API Key
+<br />
 
 ## 📄 许可证
 
-MIT License
+MIT License - 可自由使用、修改、分发
+
+---
 
 ## 🙏 致谢
 
-基于多 Agent 协作架构思想，使用火山引擎 Doubao 模型提供强大的 AI 生成能力。
+基于多智能体协作架构思想，使用**火山引擎 Doubao** 模型提供强大的 AI 生成能力。
+
+<br />
+
+---
+
+<div align="center">
+<strong>Made with ❤️ for writers who want to create more, better, faster.</strong>
+
+<br />
+<br />
+
+[⬆️ 回到顶部](#storyforge-ai)
+
+</div>
