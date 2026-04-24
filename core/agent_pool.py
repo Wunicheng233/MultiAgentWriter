@@ -104,6 +104,18 @@ class ReviseAgent(BaseAgent):
             client=self.client
         )
 
+    def revise_local_patch(self, original_chapter: str, repair_issue: dict, local_context: dict, setting_bible: str) -> dict:
+        return revise_agent.revise_local_patch(
+            original_chapter, repair_issue, local_context, setting_bible,
+            client=self.client
+        )
+
+    def stitch_chapter(self, chapter_content: str, repair_trace: list, setting_bible: str) -> str:
+        return revise_agent.stitch_chapter(
+            chapter_content, repair_trace, setting_bible,
+            client=self.client
+        )
+
 
 class AgentPool:
     """Agent实例池，全局单例"""

@@ -115,6 +115,49 @@ function getRunHeadline(run: WorkflowRun): string {
   return '本次运行仍在推进中'
 }
 
+type WorkflowEvent = {
+  at?: string
+  percent?: number
+  step?: string
+  chapter?: number | null
+  message?: string
+}
+
+const workflowV2ArtifactTypes = new Set([
+  'scene_anchor_plan',
+  'chapter_critique_v2',
+  'repair_trace',
+  'stitching_report',
+  'novel_state_snapshot',
+])
+
+function isRecord(value: JsonValue | undefined): value is { [key: string]: JsonValue } {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getWorkflowEvents(run: WorkflowRun): WorkflowEvent[] {
+  const rawEvents = run.run_metadata?.event_log
+  if (!Array.isArray(rawEvents)) return []
+  return rawEvents
+    .filter(isRecord)
+    .map(event => ({
+      at: typeof event.at === 'string' ? event.at : undefined,
+      percent: typeof event.percent === 'number' ? event.percent : undefined,
+      step: typeof event.step === 'string' ? event.step : undefined,
+      chapter: typeof event.chapter === 'number' ? event.chapter : null,
+      message: typeof event.message === 'string' ? event.message : undefined,
+    }))
+    .filter(event => event.message)
+}
+
+function getEventBadgeVariant(event: WorkflowEvent): BadgeVariant {
+  const message = event.message || ''
+  if (message.includes('Local Revise') || message.includes('Stitching')) return 'agent'
+  if (message.includes('Critic')) return 'status'
+  if (message.includes('Failure Router')) return 'genre'
+  return 'secondary'
+}
+
 export const WorkflowRunDetail: React.FC = () => {
   const { id, runId } = useParams<{ id: string; runId: string }>()
   const projectId = parseInt(id!, 10)
@@ -198,10 +241,12 @@ export const WorkflowRunDetail: React.FC = () => {
     )
   }
 
-  const metadataEntries = Object.entries(run.run_metadata || {})
+  const eventLog = getWorkflowEvents(run)
+  const metadataEntries = Object.entries(run.run_metadata || {}).filter(([key]) => key !== 'event_log')
   const stepCount = run.steps?.length ?? 0
   const feedbackCount = run.feedback_items?.length ?? 0
   const artifactCount = runArtifacts?.items.length ?? 0
+  const workflowV2Artifacts = (runArtifacts?.items || []).filter(artifact => workflowV2ArtifactTypes.has(artifact.artifact_type))
   const hasRelatedChapter = typeof run.current_chapter === 'number' && run.current_chapter > 0
   const isActiveRun = run.status === 'running' || run.status === 'waiting_confirm'
   const isFailedRun = run.status === 'failed' || run.status === 'cancelled'
@@ -316,6 +361,83 @@ export const WorkflowRunDetail: React.FC = () => {
             )}
           </Card>
         </div>
+
+        <Card>
+          <p className="text-xs uppercase tracking-[0.22em] text-secondary">Live Process</p>
+          <h2 className="mt-2 text-2xl">生成过程事件流</h2>
+          <p className="mt-2 text-secondary">
+            这里展示系统真实记录的可审计过程：上下文装配、Critic v2 诊断、Failure Router、局部修复、Stitching 和 NovelState 更新。
+          </p>
+
+          <div className="mt-5 space-y-3">
+            {eventLog.slice().reverse().map((event, index) => (
+              <div key={`${event.at || index}-${event.message}`} className="rounded-comfortable border border-border bg-parchment/50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge variant={getEventBadgeVariant(event)}>{event.step || 'event'}</Badge>
+                      {event.chapter ? <Badge variant="secondary">第 {event.chapter} 章</Badge> : null}
+                      {typeof event.percent === 'number' ? (
+                        <span className="text-sm text-secondary">{Math.round(event.percent * 100)}%</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-3 text-body">{event.message}</p>
+                  </div>
+                  <p className="text-sm text-secondary md:text-right">{formatDateTime(event.at)}</p>
+                </div>
+              </div>
+            ))}
+
+            {!eventLog.length && (
+              <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                这次 run 还没有记录细粒度事件。新的生成任务会在这里实时追加 workflow-v2 过程。
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <p className="text-xs uppercase tracking-[0.22em] text-secondary">Workflow v2 Evidence</p>
+          <h2 className="mt-2 text-2xl">局部诊断与修复证据</h2>
+          <p className="mt-2 text-secondary">
+            这些 artifacts 是判断系统是否真的进入 scene/span 定位、局部修复和 stitching 的直接证据。
+          </p>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {workflowV2Artifacts.map(artifact => {
+              const preview = getArtifactPreview(artifact, 360)
+
+              return (
+                <div key={artifact.id} className="rounded-comfortable border border-border bg-parchment/50 p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-lg text-inkwell">{getArtifactDisplayName(artifact.artifact_type)}</h3>
+                    <Badge variant="secondary">{getArtifactScopeLabel(artifact)}</Badge>
+                    {artifact.is_current && <Badge variant="agent">current</Badge>}
+                  </div>
+                  <p className="mt-2 text-sm text-secondary">
+                    Artifact #{artifact.id} · v{artifact.version_number} · {formatDateTime(artifact.created_at)}
+                  </p>
+                  {preview && (
+                    <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-standard border border-border bg-white/70 p-3 text-xs text-body">
+                      {preview}
+                    </pre>
+                  )}
+                  <div className="mt-3">
+                    <Link to={`/projects/${projectId}/artifacts/${artifact.id}`}>
+                      <Button variant="tertiary" size="sm">查看完整内容</Button>
+                    </Link>
+                  </div>
+                </div>
+              )
+            })}
+
+            {!workflowV2Artifacts.length && (
+              <div className="rounded-standard border border-dashed border-border p-4 text-secondary lg:col-span-2">
+                这次 run 还没有 workflow-v2 artifacts。若章节一次通过，通常会有 scene anchors、critique v2 和 NovelState；只有未通过才会出现 repair trace / stitching report。
+              </div>
+            )}
+          </div>
+        </Card>
 
         <Card>
           <p className="text-xs uppercase tracking-[0.22em] text-secondary">Recovery Actions</p>

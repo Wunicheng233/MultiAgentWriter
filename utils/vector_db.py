@@ -4,6 +4,8 @@
 所有重量级导入延迟到第一次使用时才进行
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 from pathlib import Path

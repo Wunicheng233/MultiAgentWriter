@@ -1,8 +1,18 @@
 """检查用户 API Key 配置"""
 
 from backend.database import SessionLocal
+from backend.auth import get_user_api_key
 from backend.models import User
 from core.config import settings
+
+
+def mask_secret(value: str | None) -> str:
+    if not value:
+        return "未配置"
+    if len(value) <= 8:
+        return "已配置（已隐藏）"
+    return f"{value[:4]}...{value[-4:]} (长度: {len(value)})"
+
 
 db = SessionLocal()
 
@@ -12,9 +22,9 @@ print("=" * 60)
 
 # 检查系统环境配置
 system_api_key = settings.get_api_key_for_agent("default")
-print(f"\n1. 系统统一 API Key:")
+print("\n1. 系统统一模型密钥:")
 if system_api_key:
-    print(f"   ✅ 已配置: {system_api_key[:4]}...{system_api_key[-4:]} (长度: {len(system_api_key)})")
+    print(f"   ✅ {mask_secret(system_api_key)}")
 else:
     print("   ❌ 未配置（空）")
 
@@ -22,11 +32,11 @@ else:
 user = db.query(User).filter(User.id == 1).first()
 if user:
     print(f"\n2. 用户 ID=1 ({user.username}):")
-    print(f"   API Key: {user.api_key}")
-    if user.api_key and user.api_key.strip():
-        print(f"   ✅ 用户已配置 API Key")
+    user_api_key = get_user_api_key(user)
+    if user_api_key and user_api_key.strip():
+        print(f"   ✅ 用户已配置模型密钥: {mask_secret(user_api_key)}")
     else:
-        print("   ❌ 用户未配置 API Key")
+        print("   ❌ 用户未配置模型密钥")
     print(f"   提示：请在前端登录后，进入用户设置页面设置火山引擎 API Key")
 else:
     print("\n2. 用户 ID=1 不存在")

@@ -6,10 +6,8 @@ FastAPI 主应用入口
 """
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import os
 
 from backend.api.auth import router as auth_router
 from backend.api.projects import router as projects_router
@@ -62,11 +60,6 @@ app.include_router(projects_router, prefix="/api")
 app.include_router(chapters_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(share_router, prefix="/api")
-
-# 挂载静态目录提供导出文件下载
-EXPORT_TMP_DIR = '/tmp/storyforge-exports'
-os.makedirs(EXPORT_TMP_DIR, exist_ok=True)
-app.mount("/exports", StaticFiles(directory=EXPORT_TMP_DIR), name="exports")
 
 
 @app.get("/api/health")

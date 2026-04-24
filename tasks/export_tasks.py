@@ -13,7 +13,13 @@ from backend.models import GenerationTask
 from services.export_service import ExportService
 
 # 创建数据库连接，从环境变量读取（同 backend/database.py）
-import os
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:postgres@localhost:5432/mutiagent_writer"

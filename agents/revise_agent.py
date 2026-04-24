@@ -50,3 +50,95 @@ def revise_chapter(
     logger.info(f"✂️  Revise Agent正在修订章节，问题数: {len(critic_issues)}")
     temperature = settings.get_temperature_for_agent("revise")
     return call_volc_api("revise", template, temperature=temperature, client=client)
+
+
+def revise_local_patch(
+    original_chapter: str,
+    repair_issue: dict,
+    local_context: dict,
+    setting_bible: str,
+    client: openai.OpenAI = None,
+) -> dict:
+    """Revise only the target fragment with adjacent context preserved."""
+    prompt_path = PROMPTS_DIR / "revise_local_patch.md"
+    with open(prompt_path, "r", encoding="utf-8") as f:
+        template = f.read().strip()
+
+    context = {
+        "world_bible": setting_bible,
+        "repair_issue": json.dumps(repair_issue, ensure_ascii=False, indent=2),
+        "local_context": json.dumps(local_context, ensure_ascii=False, indent=2),
+        "original_chapter_excerpt": _build_local_excerpt(local_context),
+    }
+
+    for key, value in context.items():
+        template = template.replace(f"{{{{{key}}}}}", str(value))
+
+    logger.info("✂️  Revise Agent正在执行局部片段修复")
+    temperature = settings.get_temperature_for_agent("revise")
+    result = call_volc_api("revise", template, temperature=temperature, client=client)
+    patch = _parse_json_result(result)
+    if patch:
+        return {
+            "target_text": str(patch.get("target_text") or local_context.get("target") or ""),
+            "replacement_text": str(patch.get("replacement_text") or patch.get("revised_target") or ""),
+            "bridge_sentence": str(patch.get("bridge_sentence") or ""),
+        }
+    return {
+        "target_text": str(local_context.get("target") or repair_issue.get("evidence_span", {}).get("quote") or ""),
+        "replacement_text": result.strip(),
+        "bridge_sentence": "",
+    }
+
+
+def stitch_chapter(
+    chapter_content: str,
+    repair_trace: list,
+    setting_bible: str,
+    client: openai.OpenAI = None,
+) -> str:
+    """Run a bounded stitching pass after local repairs."""
+    prompt_path = PROMPTS_DIR / "stitch.md"
+    with open(prompt_path, "r", encoding="utf-8") as f:
+        template = f.read().strip()
+
+    context = {
+        "world_bible": setting_bible,
+        "chapter_content": chapter_content,
+        "repair_trace": json.dumps(repair_trace, ensure_ascii=False, indent=2),
+    }
+
+    for key, value in context.items():
+        template = template.replace(f"{{{{{key}}}}}", str(value))
+
+    logger.info("🪡 Revise Agent正在执行章节拼接连贯性修复")
+    temperature = settings.get_temperature_for_agent("revise")
+    result = call_volc_api("revise", template, temperature=temperature, client=client)
+    data = _parse_json_result(result)
+    if data and data.get("chapter_content"):
+        return str(data["chapter_content"]).strip()
+    return result.strip() or chapter_content
+
+
+def _build_local_excerpt(local_context: dict) -> str:
+    parts = []
+    if local_context.get("previous"):
+        parts.append(f"【前一段】\n{local_context['previous']}")
+    parts.append(f"【目标片段】\n{local_context.get('target', '')}")
+    if local_context.get("next"):
+        parts.append(f"【后一段】\n{local_context['next']}")
+    return "\n\n".join(parts)
+
+
+def _parse_json_result(result: str) -> dict | None:
+    try:
+        text = result.strip()
+        if text.startswith("```"):
+            import re
+
+            match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+            if match:
+                text = match.group(1).strip()
+        return json.loads(text)
+    except Exception:
+        return None

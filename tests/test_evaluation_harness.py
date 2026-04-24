@@ -70,6 +70,37 @@ class EvaluationHarnessTests(unittest.TestCase):
         self.assertEqual(report.dimensions["character"], 8.0)
         self.assertEqual(report.harness_version, "chapter-evaluation-v1")
 
+    def test_evaluate_chapter_with_critic_preserves_v2_diagnostics(self):
+        class FakeCritic:
+            def critic_chapter(self, chapter_content, setting_bible, chapter_outline, content_type):
+                critique_v2 = {
+                    "style_match": [
+                        {
+                            "scene_id": "scene-1",
+                            "evidence_span": "目标问题段",
+                            "severity": "medium",
+                            "fix_instruction": "改成更克制的叙述语气",
+                        }
+                    ]
+                }
+                return False, 6, {"writing": 6}, [], critique_v2
+
+        report = evaluate_chapter_with_critic(
+            critic=FakeCritic(),
+            chapter_content="章节内容",
+            setting_bible="设定",
+            chapter_outline="大纲",
+            content_type="novel",
+            chapter_index=2,
+            revision_round=1,
+        )
+
+        self.assertFalse(report.passed)
+        self.assertEqual(report.harness_version, "chapter-evaluation-v2")
+        self.assertIn("critique_v2", report.metadata)
+        self.assertEqual(report.metadata["critique_v2"]["issues"][0]["issue_type"], "style_match")
+        self.assertEqual(report.as_legacy_tuple()[3][0]["type"], "style_match")
+
 
 if __name__ == "__main__":
     unittest.main()

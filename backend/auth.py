@@ -3,6 +3,8 @@ JWT 认证工具
 密码哈希和验证，token 签发和验证，以及用户自定义 API Key 的静态加密存储。
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import os

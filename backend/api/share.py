@@ -3,6 +3,8 @@
 无需认证即可访问只读分享内容
 """
 
+from __future__ import annotations
+
 import datetime
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session

@@ -508,6 +508,18 @@ def update_workflow_run_status(
 
     if metadata_updates:
         merged_metadata = dict(workflow_run.run_metadata or {})
+        append_event = metadata_updates.get("_append_event")
+        if isinstance(append_event, dict):
+            event_log = merged_metadata.get("event_log")
+            if not isinstance(event_log, list):
+                event_log = []
+            event_log.append(append_event)
+            merged_metadata["event_log"] = event_log[-200:]
+            metadata_updates = {
+                key: value
+                for key, value in metadata_updates.items()
+                if key != "_append_event"
+            }
         merged_metadata.update(metadata_updates)
         workflow_run.run_metadata = merged_metadata
 

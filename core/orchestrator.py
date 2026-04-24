@@ -21,7 +21,16 @@ from .agent_pool import (
     agent_pool
 )
 from .evaluation_harness import evaluate_chapter_with_critic
+from .novel_state_service import NovelStateService
 from .system_guardrails import run_system_guardrails, GuardrailResult
+from .workflow_optimization import (
+    apply_local_patch,
+    build_local_repair_context,
+    extract_scene_anchor_blocks_by_chapter,
+    format_scene_anchors_for_prompt,
+    parse_scene_anchors_from_outline,
+    route_repair_strategy,
+)
 from utils.file_utils import save_output, load_chapter_content, set_output_dir
 from utils.runtime_context import set_current_output_dir
 from utils.yaml_utils import load_user_requirements
@@ -117,6 +126,11 @@ class NovelOrchestrator:
         self.end_chapter: int = 1
         self.chapter_scores: List[Dict] = []
         self.evaluation_reports: List[Dict] = []
+        self.scene_anchor_plans: List[Dict] = []
+        self.repair_traces: List[Dict] = []
+        self.stitching_reports: List[Dict] = []
+        self.novel_state_snapshots: List[Dict] = []
+        self.novel_state_service = NovelStateService(self.output_dir)
         # 维度评分累积，用于质量分析雷达图
         self.dimension_scores = {
             "plot": [],
@@ -137,14 +151,30 @@ class NovelOrchestrator:
     def _report_progress(self, percent: int, message: str):
         """上报进度"""
         self._check_cancellation()
+        self._last_progress_percent = percent
         logger.info(f"进度 {percent}%: {message}")
-        if self.progress_callback:
+        progress_callback = getattr(self, "progress_callback", None)
+        if progress_callback:
             try:
-                self.progress_callback(percent, message)
+                progress_callback(percent, message)
             except GenerationCancelledError:
                 raise
             except Exception as e:
                 logger.error(f"进度回调执行失败: {e}")
+
+    def _report_workflow_event(self, message: str):
+        """上报细粒度工作流事件，不推进主进度条。"""
+        self._check_cancellation()
+        percent = getattr(self, "_last_progress_percent", 0)
+        logger.info(message)
+        progress_callback = getattr(self, "progress_callback", None)
+        if progress_callback:
+            try:
+                progress_callback(percent, message)
+            except GenerationCancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"工作流事件回调执行失败: {e}")
 
     def _run_critic_harness(
         self,
@@ -166,6 +196,9 @@ class NovelOrchestrator:
         if not hasattr(self, "evaluation_reports"):
             self.evaluation_reports = []
         self.evaluation_reports.append(report.to_dict())
+        self._report_workflow_event(
+            f"Workflow v2 · 第{chapter_index}章 Critic v2：评分 {report.score}/10，问题 {len(report.issues)} 个，修订轮次 {revision_round}"
+        )
         return report.as_legacy_tuple()
 
     def parse_outlines_from_setting_bible(self) -> List[Dict]:
@@ -200,9 +233,15 @@ class NovelOrchestrator:
         current_chapter = None
         current_title = ""
         current_outline_parts = []
+        in_scene_anchor_section = False
 
         for line in lines:
             line_stripped = line.strip()
+            if re.match(r"^#+\s*.*scene[_\s-]*anchors", line_stripped, re.IGNORECASE):
+                in_scene_anchor_section = True
+                continue
+            if in_scene_anchor_section:
+                continue
 
             # 优先检查是否是表格行中的章节（Planner默认输出格式）
             # 格式: | 第1章 | 本章目标 | 核心冲突 | 结尾钩子 |
@@ -226,7 +265,8 @@ class NovelOrchestrator:
                     # 开始新一章
                     current_chapter = chapter_num
                     current_title = f"第{chapter_num}章"
-                    current_outline_parts = []
+                    current_outline_parts = [outline_text]
+                    continue
 
             # 再检查是否是传统格式（行首就是第X章）
             match = chapter_pattern.match(line_stripped)
@@ -264,6 +304,15 @@ class NovelOrchestrator:
             if o["chapter_num"] not in seen:
                 unique_outlines.append(o)
                 seen.add(o["chapter_num"])
+
+        anchor_blocks = extract_scene_anchor_blocks_by_chapter(self.setting_bible)
+        for outline in unique_outlines:
+            anchor_block = anchor_blocks.get(outline["chapter_num"])
+            if anchor_block:
+                outline["outline"] = (
+                    f"{outline['outline']}\n\n"
+                    f"{json.dumps(anchor_block, ensure_ascii=False, indent=2)}"
+                )
 
         # 如果没有解析到结构化大纲，创建一个简单的大纲
         if not unique_outlines and self.plan:
@@ -325,6 +374,7 @@ class NovelOrchestrator:
             self.output_dir = set_output_dir(self.novel_name)
         # 更新全局当前输出目录（兼容现有模块依赖）
         set_current_output_dir(self.output_dir)
+        self.novel_state_service = NovelStateService(self.output_dir)
 
         # 保存信息文件路径
         self.info_path = self.output_dir / "info.json"
@@ -515,6 +565,207 @@ class NovelOrchestrator:
                 return outline.get("target_word_count", int(self.chapter_word_count))
         return int(self.chapter_word_count)
 
+    def _ensure_workflow_optimization_state(self):
+        """Initialize workflow-v2 in-memory artifact buffers for legacy tests."""
+        if not hasattr(self, "scene_anchor_plans"):
+            self.scene_anchor_plans = []
+        if not hasattr(self, "repair_traces"):
+            self.repair_traces = []
+        if not hasattr(self, "stitching_reports"):
+            self.stitching_reports = []
+        if not hasattr(self, "novel_state_snapshots"):
+            self.novel_state_snapshots = []
+        if not hasattr(self, "novel_state_service") or self.novel_state_service is None:
+            self.novel_state_service = NovelStateService(getattr(self, "output_dir", None))
+
+    def build_chapter_context(
+        self,
+        chapter_index: int,
+        chapter_plot: str,
+        related_content: str,
+        target_word_count: int,
+    ) -> Tuple[str, List[Dict]]:
+        """Assemble continuous chapter context with scene anchors and NovelState."""
+        self._ensure_workflow_optimization_state()
+        scene_anchors = parse_scene_anchors_from_outline(
+            chapter_plot,
+            default_word_count=target_word_count,
+        )
+        anchor_prompt = format_scene_anchors_for_prompt(scene_anchors)
+        state_context = self.novel_state_service.build_prewrite_context(
+            chapter_plot,
+            scene_anchors,
+        )
+        self.scene_anchor_plans.append({
+            "artifact_type": "scene_anchor_plan",
+            "chapter_index": chapter_index,
+            "scene_anchors": scene_anchors,
+        })
+        self._report_workflow_event(
+            f"Workflow v2 · 第{chapter_index}章 Context Assembler：已装配 {len(scene_anchors)} 个 scene anchors 与 NovelState"
+        )
+        context_parts = [
+            related_content,
+            anchor_prompt,
+            state_context,
+            "【连续写作约束】本章必须一次生成完整章节；scene anchors 只作为内部路标，不能拆成彼此独立的片段。",
+        ]
+        return "\n\n".join(part for part in context_parts if part), scene_anchors
+
+    def route_repair_strategy(self, issue: Dict) -> str:
+        """Select a local repair strategy for an issue."""
+        return route_repair_strategy(issue)
+
+    def _get_latest_critique_v2(self) -> Dict:
+        if not getattr(self, "evaluation_reports", None):
+            return {}
+        latest = self.evaluation_reports[-1]
+        metadata = latest.get("metadata") or {}
+        critique_v2 = metadata.get("critique_v2")
+        if isinstance(critique_v2, dict):
+            return critique_v2
+        return {}
+
+    def _normalize_repair_issue(self, issue: Dict) -> Dict:
+        """Flatten harness metadata so local repair can consume one stable shape."""
+        if not isinstance(issue, dict):
+            issue = {"type": "未知问题", "fix": str(issue), "location": "全文"}
+        normalized = dict(issue)
+        metadata = normalized.pop("metadata", None)
+        if isinstance(metadata, dict):
+            for key, value in metadata.items():
+                normalized.setdefault(key, value)
+        normalized["issue_type"] = normalized.get("issue_type") or normalized.get("type") or "local_rewrite"
+        normalized["fix_instruction"] = (
+            normalized.get("fix_instruction")
+            or normalized.get("fix")
+            or normalized.get("suggestion")
+            or ""
+        )
+        evidence_span = normalized.get("evidence_span")
+        if not isinstance(evidence_span, dict):
+            evidence_span = {"quote": str(evidence_span or normalized.get("location") or "")}
+        normalized["evidence_span"] = evidence_span
+        normalized["fix_strategy"] = self.route_repair_strategy(normalized)
+        return normalized
+
+    def _apply_repair_batch(
+        self,
+        chapter_index: int,
+        current_content: str,
+        issues: List[Dict],
+        chapter_outline: str,
+        revise_round: int,
+    ) -> Tuple[str, bool, List[Dict]]:
+        """Apply local repairs when possible; return content, used_local, trace."""
+        self._ensure_workflow_optimization_state()
+        repair_trace: List[Dict] = []
+        used_local_repair = False
+        normalized_issues = [self._normalize_repair_issue(issue) for issue in (issues or [])]
+        local_revise = getattr(self.revise, "revise_local_patch", None)
+        if normalized_issues:
+            strategies = ", ".join(issue.get("fix_strategy", "local_rewrite") for issue in normalized_issues[:3])
+            self._report_workflow_event(
+                f"Workflow v2 · 第{chapter_index}章 Failure Router：本轮策略 {strategies}"
+            )
+
+        for issue in normalized_issues[:3]:
+            evidence_quote = str((issue.get("evidence_span") or {}).get("quote") or issue.get("location") or "")
+            if not local_revise or not evidence_quote or evidence_quote == "全文":
+                continue
+            local_context = build_local_repair_context(current_content, evidence_quote)
+            if not local_context.get("target"):
+                continue
+
+            before_content = current_content
+            patch = local_revise(
+                current_content,
+                issue,
+                {
+                    **local_context,
+                    "chapter_outline": chapter_outline,
+                    "repair_strategy": issue.get("fix_strategy"),
+                },
+                self.setting_bible,
+            )
+            patched_content, applied = apply_local_patch(current_content, patch or {})
+            trace_item = {
+                "artifact_type": "repair_trace",
+                "chapter_index": chapter_index,
+                "revision_round": revise_round,
+                "issue": issue,
+                "repair_strategy": issue.get("fix_strategy"),
+                "evidence": issue.get("evidence_span"),
+                "target_text": (patch or {}).get("target_text") if isinstance(patch, dict) else "",
+                "replacement_applied": bool(applied),
+            }
+            repair_trace.append(trace_item)
+            if applied and patched_content != before_content:
+                current_content = patched_content
+                used_local_repair = True
+                self._report_workflow_event(
+                    f"Workflow v2 · 第{chapter_index}章 Local Revise：已局部替换 {issue.get('fix_strategy')}"
+                )
+
+        if used_local_repair:
+            current_content = self.run_stitching_pass(chapter_index, current_content, repair_trace)
+            self.repair_traces.extend(repair_trace)
+            return current_content, True, repair_trace
+
+        current_content = self.revise.revise_chapter(
+            current_content,
+            issues,
+            self.setting_bible,
+        )
+        self._report_workflow_event(
+            f"Workflow v2 · 第{chapter_index}章 Revise：局部定位不足，已回退整章轻量修订"
+        )
+        return current_content, False, repair_trace
+
+    def run_stitching_pass(self, chapter_index: int, chapter_content: str, repair_trace: List[Dict]) -> str:
+        """Repair transitions and voice after local patches."""
+        self._ensure_workflow_optimization_state()
+        stitcher = getattr(self.revise, "stitch_chapter", None)
+        if not stitcher:
+            self.stitching_reports.append({
+                "artifact_type": "stitching_report",
+                "chapter_index": chapter_index,
+                "applied": False,
+                "reason": "revise agent does not expose stitch_chapter",
+            })
+            return chapter_content
+
+        stitched = stitcher(chapter_content, repair_trace, self.setting_bible)
+        applied = bool(stitched and stitched != chapter_content)
+        self.stitching_reports.append({
+            "artifact_type": "stitching_report",
+            "chapter_index": chapter_index,
+            "applied": applied,
+            "repair_count": len(repair_trace),
+        })
+        self._report_workflow_event(
+            f"Workflow v2 · 第{chapter_index}章 Stitching Pass：{'已修复过渡' if applied else '无需改动'}，局部修复 {len(repair_trace)} 处"
+        )
+        return stitched or chapter_content
+
+    def _record_novel_state_snapshot(self, chapter_index: int, chapter_content: str, scene_anchors: List[Dict]):
+        self._ensure_workflow_optimization_state()
+        delta = self.novel_state_service.extract_state_delta_from_chapter(
+            chapter_index,
+            chapter_content,
+            scene_anchors,
+        )
+        state = self.novel_state_service.merge_delta(delta)
+        self.novel_state_snapshots.append({
+            "artifact_type": "novel_state_snapshot",
+            "chapter_index": chapter_index,
+            "state_delta": delta,
+            "state": state,
+        })
+        self._report_workflow_event(
+            f"Workflow v2 · 第{chapter_index}章 NovelState：已合并章节状态快照"
+        )
+
     def run_chapter_generation(self, chapter_index: int, prev_chapter_end: str = "") -> Tuple[str, int, bool, List[Dict]]:
         """
         生成单个章节，遵循精简架构流程：
@@ -539,12 +790,16 @@ class NovelOrchestrator:
 
         # 检索相关历史章节和核心设定，控制返回数量节省token
         chapter_plot = self.get_chapter_outline(chapter_index)
+        target_word_count = self.get_target_word_count(chapter_index)
         related_chapters = search_related_chapter_content(chapter_plot, top_k=2, max_chapter_num=chapter_index)
         related_settings = search_core_setting(chapter_plot, top_k=1)
         related_content = related_settings + "\n" + related_chapters
-
-        # 获取本章目标字数
-        target_word_count = self.get_target_word_count(chapter_index)
+        related_content, scene_anchors = self.build_chapter_context(
+            chapter_index,
+            chapter_plot,
+            related_content,
+            target_word_count,
+        )
 
         # Step 1: Writer 生成章节初稿
         content_type = self.req.get("content_type", "novel")
@@ -690,11 +945,13 @@ class NovelOrchestrator:
                 f"正在修订 (第{revise_count + 1}/{max_revise_loops})..."
             )
 
-            # Step 4: Revise 根据问题清单修订
-            current_content = self.revise.revise_chapter(
-                current_content,
-                issues,
-                self.setting_bible
+            # Step 4: 优先做带邻接上下文的局部修复，无法定位时回退整章修订
+            current_content, used_local_repair, repair_trace = self._apply_repair_batch(
+                chapter_index=chapter_index,
+                current_content=current_content,
+                issues=issues,
+                chapter_outline=chapter_outline,
+                revise_round=revise_count + 1,
             )
             revise_count += 1
             self._check_cancellation()
@@ -847,6 +1104,7 @@ class NovelOrchestrator:
 
         # 添加到向量数据库，用于下文检索
         add_chapter_to_db(chapter_index, f"第{chapter_index}章", current_content)
+        self._record_novel_state_snapshot(chapter_index, current_content, scene_anchors)
 
         logger.info(f"第 {chapter_index} 章生成完成，已保存")
 
@@ -930,11 +1188,13 @@ class NovelOrchestrator:
                         "location": "全文",
                         "fix": feedback
                     }]
-                    # 修订
-                    current_content = self.revise.revise_chapter(
-                        existing_content,
-                        issues,
-                        self.setting_bible
+                    # 修订：进入同一套 repair router；无法定位片段时会安全回退整章修订
+                    current_content, _, _ = self._apply_repair_batch(
+                        chapter_index=chapter_num,
+                        current_content=existing_content,
+                        issues=issues,
+                        chapter_outline=outline["outline"],
+                        revise_round=1,
                     )
                     # 重新运行防护检查和评审
                     guardrail_context = {
@@ -1064,8 +1324,18 @@ class NovelOrchestrator:
                 info["chapter_scores"] = self.chapter_scores
                 info["overall_quality_score"] = round(overall_score, 2)
                 info["dimension_average_scores"] = dimension_averages
-                info["evaluation_harness_version"] = "chapter-evaluation-v1"
-                info["evaluation_reports"] = getattr(self, "evaluation_reports", [])
+                evaluation_reports = getattr(self, "evaluation_reports", [])
+                info["evaluation_harness_version"] = (
+                    "chapter-evaluation-v2"
+                    if any(report.get("harness_version") == "chapter-evaluation-v2" for report in evaluation_reports)
+                    else "chapter-evaluation-v1"
+                )
+                info["evaluation_reports"] = evaluation_reports
+                info["workflow_optimization_version"] = "quality-workflow-v2"
+                info["scene_anchor_plans"] = getattr(self, "scene_anchor_plans", [])
+                info["repair_traces"] = getattr(self, "repair_traces", [])
+                info["stitching_reports"] = getattr(self, "stitching_reports", [])
+                info["novel_state_snapshots"] = getattr(self, "novel_state_snapshots", [])
                 info["architecture"] = "slim-v2"
                 # 保存回info.json
                 with open(self.info_path, "w", encoding="utf-8") as f:
