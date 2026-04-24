@@ -5,6 +5,11 @@ type ArtifactLike = ArtifactSummary | ArtifactDetail
 const artifactTypeLabels: Record<string, string> = {
   chapter_draft: '章节草稿',
   chapter_evaluation: '章节评审',
+  chapter_critique_v2: 'Critic v2 诊断',
+  scene_anchor_plan: 'Scene Anchors',
+  repair_trace: '局部修复轨迹',
+  stitching_report: 'Stitching 报告',
+  novel_state_snapshot: 'NovelState 快照',
   project_config_snapshot: '项目配置快照',
 }
 

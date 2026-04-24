@@ -4,10 +4,16 @@ SQLAlchemy 引擎和会话管理
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
-from core.config import settings
 import os
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
 
 # 从环境变量读取数据库URL，默认本地PostgreSQL
 DATABASE_URL = os.getenv(

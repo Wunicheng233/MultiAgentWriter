@@ -4,6 +4,8 @@
 触发生成任务
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path

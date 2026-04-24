@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
 
+from .workflow_optimization import normalize_critic_v2_payload
+
 
 DEFAULT_DIMENSIONS: dict[str, float] = {
     "plot": 5.0,
@@ -142,6 +144,7 @@ def build_chapter_evaluation_report(
     revision_round: int = 0,
     evaluator_agent: str = "critic",
     metadata: dict[str, Any] | None = None,
+    harness_version: str = "chapter-evaluation-v1",
 ) -> ChapterEvaluationReport:
     normalized_issues = [
         EvaluationIssue.from_raw(issue, source=evaluator_agent)
@@ -157,6 +160,7 @@ def build_chapter_evaluation_report(
         evaluator_agent=evaluator_agent,
         content_type=content_type,
         revision_round=max(0, int(revision_round or 0)),
+        harness_version=harness_version,
         metadata=metadata or {},
     )
 
@@ -170,12 +174,27 @@ def evaluate_chapter_with_critic(
     chapter_index: int,
     revision_round: int = 0,
 ) -> ChapterEvaluationReport:
-    passed, score, dimensions, issues = critic.critic_chapter(
+    critic_result = critic.critic_chapter(
         chapter_content,
         setting_bible,
         chapter_outline,
         content_type,
     )
+    if not isinstance(critic_result, tuple):
+        raise TypeError("Critic must return a tuple")
+
+    metadata: dict[str, Any] = {}
+    harness_version = "chapter-evaluation-v1"
+    if len(critic_result) >= 5:
+        passed, score, dimensions, issues, critique_v2 = critic_result[:5]
+        normalized_v2 = normalize_critic_v2_payload(critique_v2, legacy_issues=issues)
+        metadata["critique_v2"] = normalized_v2
+        harness_version = "chapter-evaluation-v2"
+        if not issues:
+            issues = normalized_v2["issues"]
+    else:
+        passed, score, dimensions, issues = critic_result[:4]
+
     return build_chapter_evaluation_report(
         chapter_index=chapter_index,
         passed=passed,
@@ -185,4 +204,6 @@ def evaluate_chapter_with_critic(
         content_type=content_type,
         revision_round=revision_round,
         evaluator_agent="critic",
+        metadata=metadata,
+        harness_version=harness_version,
     )

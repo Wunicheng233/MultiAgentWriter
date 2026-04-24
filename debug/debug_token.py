@@ -1,14 +1,12 @@
-
 #!/usr/bin/env python3
+import os
+
 from backend.auth import decode_token
-from core.config import settings
 
-# The token from the screenshot
-token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImlhdCI6MTc0NTQyNjQwMCwiZXhwIjoxNzQ1NTEyODAwfQ.zrwGsz6aYokEPZkB4XAKrKkSOy1hCA17AxpArriJH3w"
 
-print(f"Token: {token[:60]}...")
-print(f"SECRET_KEY length: {len(settings.jwt_secret_key)}, first 10 chars: {settings.jwt_secret_key[:10]}...")
-print()
+token = os.getenv("DEBUG_JWT_TOKEN", "").strip()
+if not token:
+    raise SystemExit("Set DEBUG_JWT_TOKEN to decode a token safely.")
 
 payload = decode_token(token)
 if payload is None:

@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 import os
 import datetime
@@ -9,8 +8,7 @@ from backend.auth import create_access_token, decode_token
 from core.config import settings
 from datetime import timedelta
 
-print(f"Using SECRET_KEY: {repr(settings.jwt_secret_key)}")
-print(f"Length: {len(settings.jwt_secret_key)}")
+print("JWT settings loaded")
 print(f"Algorithm: HS256")
 
 # Create directly with jwt.encode

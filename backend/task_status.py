@@ -6,6 +6,8 @@
 - 避免不同 API 对 waiting_confirm 等中间态判断不一致
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 
 from sqlalchemy.orm import Query, Session

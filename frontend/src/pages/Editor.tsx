@@ -31,6 +31,11 @@ import {
   getTaskStatusText,
   getWorkflowAgentStatesFromRuntime,
 } from '../utils/workflow'
+import {
+  chapterContentToEditorHtml,
+  chapterContentToPreviewText,
+  renderSafeMarkdown,
+} from '../utils/safeContent'
 
 // 精简架构：仅 4 个核心 Agent
 const agentNames = [
@@ -55,70 +60,6 @@ export const Editor: React.FC = () => {
   const [planPreview, setPlanPreview] = useState<string>('')
   const [liveTaskStatus, setLiveTaskStatus] = useState<string | null>(null)
   const [liveCurrentChapter, setLiveCurrentChapter] = useState<number | null>(null)
-
-  // 简单 markdown 渲染
-  const renderMarkdown = (text: string) => {
-    // 处理 markdown 表格
-    const lines = text.split('\n');
-    const processedLines: string[] = [];
-    let tableStarted = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-        if (!tableStarted) {
-          processedLines.push('<table class="border-collapse my-3 w-full bg-bg rounded border border-border overflow-hidden">');
-          tableStarted = true;
-        }
-        // 分割单元格
-        const cells = line.split('|').filter(c => c.trim().length > 0);
-        // 判断是否是分隔线行 (| :--- | :--- |)
-        const isSeparator = cells.every(c => /^[\s\-:]+$/.test(c.trim()));
-        if (isSeparator) {
-          continue;
-        }
-        processedLines.push('  <tr>');
-        cells.forEach(cell => {
-          processedLines.push(`    <td class="border border-border p-2 align-top">${cell.trim()}</td>`);
-        });
-        processedLines.push('  </tr>');
-      } else {
-        if (tableStarted) {
-          processedLines.push('</table>');
-          tableStarted = false;
-        }
-        if (line.trim()) {
-          processedLines.push(line);
-        }
-      }
-    }
-    if (tableStarted) {
-      processedLines.push('</table>');
-    }
-
-    let html = processedLines.join('\n');
-
-    // 处理标题、粗体等
-    html = html
-      .replace(/^# (.*)$/gm, '<h1 class="text-xl font-bold mb-2 mt-4">$1</h1>')
-      .replace(/^## (.*)$/gm, '<h2 class="text-lg font-semibold mb-2 mt-3">$1</h2>')
-      .replace(/^### (.*)$/gm, '<h3 class="text-base font-semibold mb-1 mt-2">$1</h3>')
-      .replace(/\*\*(.*)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/g, '<em>$1</em>')
-      .replace(/\[(.*)\]\((.*)\)/g, '<a href="$2" class="underline text-sage">$1</a>')
-      .replace(/^- /gm, '<li class="ml-4 list-disc">')
-      .replace(/\n\n+/g, '</p><p>');
-
-    // 包装段落
-    if (!html.startsWith('<h') && !html.startsWith('<table') && !html.startsWith('<li')) {
-      html = '<p>' + html;
-    }
-    if (!html.endsWith('</table>') && !html.endsWith('</h1>') && !html.endsWith('</h2>') && !html.endsWith('</h3>') && !html.endsWith('</li>')) {
-      html = html + '</p>';
-    }
-
-    return html;
-  };
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -213,19 +154,6 @@ export const Editor: React.FC = () => {
     }, 2000)
   }, [updateMutation])
 
-  // 将纯文本转换为HTML段落格式供TipTap使用
-  // AI生成小说通常每一行就是一个段落，即使没有空行
-  const convertPlainTextToHtml = useCallback((text: string): string => {
-    if (!text) return ''
-    // 按换行分割，过滤掉空行，每一行作为一个段落
-    const lines = text.split('\n')
-      .map(line => line.trim())
-      .filter(line => line !== '') // 跳过空行
-    return lines
-      .map(line => `<p>${line}</p>`)
-      .join('')
-  }, [])
-
   // 编辑器初始化 - 当chapter加载完成后重新创建编辑器保证content正确
   const editor = useEditor({
     extensions: [
@@ -238,7 +166,7 @@ export const Editor: React.FC = () => {
         placeholder: '开始写作...',
       }),
     ],
-    content: chapter?.content ? convertPlainTextToHtml(chapter.content) : '',
+    content: chapter?.content ? chapterContentToEditorHtml(chapter.content) : '',
     onUpdate: ({ editor }) => {
       // 防抖自动保存
       debouncedSave(editor.getHTML())
@@ -254,10 +182,10 @@ export const Editor: React.FC = () => {
     const currentContent = editor.getHTML()
     // 如果当前编辑器没有内容（只有空p标签），说明还没填充，需要填充
     if (!currentContent || currentContent.trim() === '<p></p>') {
-      const htmlContent = convertPlainTextToHtml(chapter.content)
+      const htmlContent = chapterContentToEditorHtml(chapter.content)
       editor.commands.setContent(htmlContent)
     }
-  }, [editor, chapter?.content, convertPlainTextToHtml])
+  }, [editor, chapter?.content])
 
   // 手动保存
   const handleSave = () => {
@@ -425,8 +353,8 @@ export const Editor: React.FC = () => {
         status: effectiveTaskStatus,
       })
     : '尚未启动'
-  const chapterPreviewHtml = chapter?.content
-    ? (chapter.content.includes('<') ? chapter.content : convertPlainTextToHtml(chapter.content))
+  const chapterPreviewText = chapter?.content
+    ? chapterContentToPreviewText(chapter.content)
     : ''
 
   if (isLoading) {
@@ -660,16 +588,16 @@ export const Editor: React.FC = () => {
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">策划方案预览：</label>
                 <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(planPreview || '加载中...') }}
+                  dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(planPreview || '加载中...') }}
                 />
               </div>
             )}
             {waitingConfirmChapter !== 0 && chapter && (
               <div className="mb-6">
                 <label className="block text-sm font-medium mb-2">章节预览：</label>
-                <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto"
-                  dangerouslySetInnerHTML={{ __html: chapterPreviewHtml }}
-                />
+                <div className="bg-parchment border border-border rounded-standard p-4 max-h-[40vh] overflow-y-auto whitespace-pre-wrap">
+                  {chapterPreviewText}
+                </div>
               </div>
             )}
             <div className="space-y-4">

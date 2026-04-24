@@ -15,6 +15,16 @@ from utils.logger import logger
 from core.config import settings
 from config import PROMPTS_DIR, CRITIC_PASS_SCORE
 
+CRITIC_V2_DIMENSIONS = (
+    "plot_progress",
+    "character_consistency",
+    "style_match",
+    "worldview_conflict",
+    "redundancy",
+    "hook_strength",
+    "rhythm_continuity",
+)
+
 
 def critic_chapter(
     chapter_content: str,
@@ -22,7 +32,7 @@ def critic_chapter(
     chapter_outline: str,
     content_type: str = "novel",
     client: openai.OpenAI = None
-) -> Tuple[bool, int, Dict[str, int], List[Dict]]:
+) -> Tuple:
     """
     评审章节，输出 JSON 格式的评审结果。
 
@@ -77,6 +87,10 @@ def critic_chapter(
     issues = data.get("issues", [])
 
     # 确保score在1-10范围
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        score = 5
     score = max(1, min(10, score))
 
     # 确保每个维度都有值，默认5分
@@ -91,12 +105,23 @@ def critic_chapter(
         if k not in dimensions:
             dimensions[k] = default_dimensions[k]
         else:
+            try:
+                dimensions[k] = int(dimensions[k])
+            except (TypeError, ValueError):
+                dimensions[k] = default_dimensions[k]
             dimensions[k] = max(1, min(10, dimensions[k]))
 
     logger.info(f"📊 评审完成，分数: {score}/10，通过: {passed}，问题数: {len(issues)}")
     if not passed and issues:
         for i, issue in enumerate(issues[:3]):
             logger.info(f"   {i+1}. [{issue.get('type')}] {issue.get('location')} → {issue.get('fix')[:50]}")
+
+    critique_v2 = data.get("critique_v2") or data.get("diagnostics")
+    if critique_v2 is None and any(field in data for field in CRITIC_V2_DIMENSIONS):
+        critique_v2 = {field: data.get(field, []) for field in CRITIC_V2_DIMENSIONS}
+
+    if critique_v2 is not None:
+        return passed, score, dimensions, issues, critique_v2
 
     return passed, score, dimensions, issues
 

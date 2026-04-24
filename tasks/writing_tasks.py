@@ -26,7 +26,10 @@ from utils.runtime_context import (
     set_current_run_context,
 )
 from backend.database import SessionLocal
-from backend.evaluation_sync import sync_evaluation_reports_to_artifacts
+from backend.evaluation_sync import (
+    sync_evaluation_reports_to_artifacts,
+    sync_workflow_optimization_artifacts_to_artifacts,
+)
 from backend.models import GenerationTask, Project, User, Chapter
 from backend.workflow_service import (
     materialize_open_feedback_files,
@@ -143,12 +146,13 @@ def generate_novel_task(
         progress = percent / 100.0
         current_chapter = None
         workflow_step_key = "running"
+        chapter_match = re.search(r"第\s*(\d+)\s*章", message)
+        if chapter_match:
+            current_chapter = int(chapter_match.group(1))
 
         # 解析当前步骤
         if ("正在生成第" in message or "章生成完成" in message) and "章" in message:
-            match = re.search(r"第\s*(\d+)\s*章", message)
-            if match:
-                current_chapter = int(match.group(1))
+            if chapter_match:
                 workflow_step_key = "generating_chapter"
                 self.update_state(
                     state="PROGRESS",
@@ -193,6 +197,18 @@ def generate_novel_task(
                     "message": message,
                 }
             )
+        elif "Workflow v2" in message or "Critic v2" in message or "Local Revise" in message or "Stitching" in message:
+            workflow_step_key = "generating_chapter" if current_chapter else "running"
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "progress": progress,
+                    "percent": percent,
+                    "step": workflow_step_key,
+                    "message": message,
+                    "chapter": current_chapter,
+                }
+            )
         elif "完成" in message and "🎉" in message:
             workflow_step_key = "completed"
             self.update_state(
@@ -232,6 +248,13 @@ def generate_novel_task(
                     metadata_updates={
                         "last_progress": progress,
                         "last_message": message,
+                        "_append_event": {
+                            "at": datetime.utcnow().isoformat(),
+                            "percent": progress,
+                            "step": workflow_step_key,
+                            "chapter": current_chapter,
+                            "message": message,
+                        },
                     },
                 )
                 db.commit()
@@ -283,6 +306,12 @@ def generate_novel_task(
                                         project=project,
                                         workflow_run_id=task_record.workflow_run.id if task_record.workflow_run else None,
                                         evaluation_reports=info.get("evaluation_reports"),
+                                    )
+                                    sync_workflow_optimization_artifacts_to_artifacts(
+                                        db=db,
+                                        project=project,
+                                        workflow_run_id=task_record.workflow_run.id if task_record.workflow_run else None,
+                                        info=info,
                                     )
                                     # 更新当前章节的quality_score
                                     if "chapter_scores" in info:
@@ -448,6 +477,12 @@ def generate_novel_task(
                                         project=project,
                                         workflow_run_id=task_record.workflow_run.id if task_record.workflow_run else None,
                                         evaluation_reports=info.get("evaluation_reports"),
+                                    )
+                                    sync_workflow_optimization_artifacts_to_artifacts(
+                                        db=db,
+                                        project=project,
+                                        workflow_run_id=task_record.workflow_run.id if task_record.workflow_run else None,
+                                        info=info,
                                     )
                                     # 更新每个章节的quality_score
                                     if "chapter_scores" in info:

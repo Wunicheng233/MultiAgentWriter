@@ -12,8 +12,8 @@
 | **MUST NOT** | 输出任何评审报告之外的文字（开场白、总结、建议信）。 | 输出必须是纯净 JSON。 |
 | **MUST NOT** | 在 `fix` 字段中给出模糊建议（如“改得更好一些”）。 | 指令必须是 **可直接执行的**。 |
 | **MUST NOT** | 对“通过”的章节输出任何 `issues`。 | 通过即空数组。 |
-| **MUST** | 输出严格的 JSON 格式，包含 `passed`、`score`、`issues` 三个顶层字段。 | 系统解析依赖于此。 |
-| **MUST** | 每个 issue 必须包含 `type`、`location`、`fix` 三个子字段。 | 确保 Revise 可定位、可执行。 |
+| **MUST** | 输出严格的 JSON 格式，包含 `passed`、`score`、`dimensions`、`issues`、`diagnostics` 五个顶层字段。 | 系统解析依赖于此。 |
+| **MUST** | 每个旧版 issue 必须包含 `type`、`location`、`fix` 三个子字段；每个 v2 issue 必须包含 `scene_id`、`evidence_span`、`severity`、`fix_strategy`、`fix_instruction`。 | 确保 Revise 可定位、可执行。 |
 | **MUST** | 当 `passed = false` 时，`issues` 数组必须至少包含 1 条问题。 | 不通过必须有理由。 |
 | **SHOULD** | `location` 字段引用原文的 **关键短句**，不超过 20 字。 | 便于 Revise 快速定位。 |
 | **SHOULD** | `fix` 字段使用 **祈使句**，如“将...改为...”。 | 减少 Revise 的理解成本。 |
@@ -79,9 +79,48 @@
       "location": "用于定位的原文短句",
       "fix": "可直接执行的修改指令"
     }
-  ]
+  ],
+  "diagnostics": {
+    "plot_progress": [],
+    "character_consistency": [],
+    "style_match": [],
+    "worldview_conflict": [],
+    "redundancy": [],
+    "hook_strength": [],
+    "rhythm_continuity": []
+  }
 }
 ```
+
+### 4.1.1 结构化诊断 v2
+
+`diagnostics` 是 Critic v2 的主诊断字段。每个问题必须放入最匹配的维度数组：
+
+| 字段 | 含义 |
+| :--- | :--- |
+| `plot_progress` | 本章目标、核心冲突、剧情推进是否完成。 |
+| `character_consistency` | 人物动机、行为、对白是否符合设定。 |
+| `style_match` | 文风、语气、表达质感是否与设定和参考文一致。 |
+| `worldview_conflict` | 世界观、时代、地点、规则是否冲突。 |
+| `redundancy` | 重复解释、拖沓、无效段落。 |
+| `hook_strength` | 章节结尾钩子是否有吸引力。 |
+| `rhythm_continuity` | 情绪曲线、张力递进、段落衔接是否连贯。 |
+
+每条 v2 issue 使用以下结构：
+
+```json
+{
+  "scene_id": "scene-1 或 chapter",
+  "evidence_span": {
+    "quote": "原文中可定位的短句"
+  },
+  "severity": "low/medium/high",
+  "fix_strategy": "scene_goal_rewrite/style_repair/state_consistency_repair/character_intent_repair/compression_tension_rewrite/hook_rewrite/rhythm_continuity_repair/local_rewrite",
+  "fix_instruction": "可直接执行的局部修复指令"
+}
+```
+
+旧版 `issues` 仍需保留，供历史链路兼容；但定位和修复策略以 `diagnostics` 为准。
 
 ### 4.2 字段填充规则
 
@@ -101,7 +140,23 @@
 {
   "passed": true,
   "score": 8,
-  "issues": []
+  "dimensions": {
+    "plot": 8,
+    "character": 8,
+    "hook": 8,
+    "writing": 8,
+    "setting": 8
+  },
+  "issues": [],
+  "diagnostics": {
+    "plot_progress": [],
+    "character_consistency": [],
+    "style_match": [],
+    "worldview_conflict": [],
+    "redundancy": [],
+    "hook_strength": [],
+    "rhythm_continuity": []
+  }
 }
 ```
 
@@ -126,7 +181,40 @@
       "location": "他心中一动，只见一个黑影闪过",
       "fix": "将'他心中一动，只见'改为'他后颈一凉。'，直接描述黑影闪过"
     }
-  ]
+  ],
+  "diagnostics": {
+    "plot_progress": [
+      {
+        "scene_id": "scene-1",
+        "evidence_span": {"quote": "张毅决定暂时不去找线人"},
+        "severity": "high",
+        "fix_strategy": "scene_goal_rewrite",
+        "fix_instruction": "删除此句，改为张毅直接前往铁西区与线人会面，完成大纲要求的接头事件"
+      }
+    ],
+    "character_consistency": [],
+    "style_match": [
+      {
+        "scene_id": "scene-2",
+        "evidence_span": {"quote": "他心中一动，只见一个黑影闪过"},
+        "severity": "medium",
+        "fix_strategy": "style_repair",
+        "fix_instruction": "删除套话，改成动作和感官细节驱动的短句"
+      }
+    ],
+    "worldview_conflict": [],
+    "redundancy": [],
+    "hook_strength": [
+      {
+        "scene_id": "scene-3",
+        "evidence_span": {"quote": "明天会发生什么呢？"},
+        "severity": "high",
+        "fix_strategy": "hook_rewrite",
+        "fix_instruction": "删除疑问句，改为窗外玻璃碎裂声打断角色行动，让结尾停在可感知的危险上"
+      }
+    ],
+    "rhythm_continuity": []
+  }
 }
 ```
 
@@ -161,8 +249,10 @@
 | 4 | 若 `passed = false`，`issues` 数组是否至少包含 1 条问题？ |
 | 5 | 若 `passed = true`，`issues` 是否为空数组 `[]`？ |
 | 6 | 每条 issue 是否包含 `type`、`location`、`fix` 三个字段？ |
-| 7 | `type` 的值是否来自预定义标签表？ |
-| 8 | `location` 是否不超过 20 字，且能在原文中定位？ |
-| 9 | `fix` 是否为祈使句，且描述了一个可直接执行的修改动作？ |
+| 7 | `diagnostics` 是否包含 7 个固定字段？ |
+| 8 | 每条 v2 issue 是否包含 `scene_id`、`evidence_span.quote`、`severity`、`fix_strategy`、`fix_instruction`？ |
+| 9 | `type` 的值是否来自预定义标签表？ |
+| 10 | `location` 是否不超过 20 字，且能在原文中定位？ |
+| 11 | `fix` / `fix_instruction` 是否为祈使句，且描述了一个可直接执行的修改动作？ |
 
 **修正指令**：若有任一项未打钩，**MUST** 修正 JSON 后再输出。
