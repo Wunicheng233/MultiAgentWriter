@@ -43,6 +43,14 @@ logs/
 static_export/
 *.log
 
+# Runtime project artifacts
+# Keep generated novel drafts, score snapshots, and dynamic state local.
+data/projects/**/chapters/
+data/projects/**/info.json
+data/projects/**/novel_state.json
+data/projects/**/feedback_*.txt
+data/projects/**/exports/
+
 # Environment variables
 .env
 .env.*

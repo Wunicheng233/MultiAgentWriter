@@ -1,8 +1,8 @@
 # 📖 Writer - Multi-Agent 小说创作系统
 
-这是一个正在演进中的 **Multi-Agent 小说创作系统**。当前版本已经具备前端工作台、FastAPI 后端、Celery 异步生成、多角色 Agent 编排、章节编辑、导出、分享和基础质量评审能力。
+这是一个正在演进中的 **Multi-Agent 小说创作系统**。当前版本已经具备前端工作台、FastAPI 后端、Celery 异步生成、多角色 Agent 编排、章节编辑、导出、分享、质量评审、局部修复和过程可视化能力。
 
-> 当前真实状态：系统核心仍是 `orchestrator` 驱动的串行工作流，主要链路是 Planner → Writer → Guardrails → Critic → Revise。我们正在逐步把它演进为更可追踪、可回放、可评测的多智能体创作平台，新的 `WorkflowRun`、`Artifact`、`FeedbackItem`、`AgentContract` 和 `evaluation_harness` 已经开始承担长期架构基础。
+> 当前真实状态：系统核心仍由 `orchestrator` 驱动，但主链路已经升级为质量优先的 workflow v2：Chapter 仍是叙事主单位，scene/span 只作为规划、诊断、定位和局部修复单位。系统会记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、`FeedbackItem`、`AgentContract`、`evaluation_harness` 和 workflow-v2 事件，方便在前端回放生成过程。
 
 > **部署说明**: 本项目采用前后端分离架构，需要后端提供API服务。
 > 
@@ -12,11 +12,13 @@
 
 ## ✨ 功能特点
 
-- 🤖 **多角色创作链路** - Planner 负责策划，Writer 负责章节，Critic 负责评审，Revise 负责修订
-- 🧭 **工作流与工件追踪** - 记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、结构化反馈与章节评审报告
-- 🧪 **Evaluation Harness 基座** - Critic 结果会标准化为章节评审报告，并沉淀为可版本化工件
+- 🤖 **多角色创作链路** - Planner 负责策划与 scene anchors，Writer 连续生成整章，Critic v2 负责结构化诊断，Revise 负责局部修复
+- 🧭 **工作流与工件追踪** - 记录 `WorkflowRun`、`WorkflowStepRun`、`Artifact`、结构化反馈、章节评审报告和 workflow-v2 事件
+- 🧪 **Evaluation Harness 基座** - Critic v2 结果会标准化为章节评审报告，并沉淀为可版本化工件
 - 🛡️ **系统层 Guardrails** - 在 Critic 前执行纯代码格式/标题/段落/字数等基础检查
-- 🌍 **世界观与上下文管理** - Worldview Manager 与向量检索支撑跨章节衔接
+- 🧩 **局部修复 + Stitching** - 问题定位到 scene/span 后只替换目标片段，并强制执行过渡、代词、情绪和语气拼接检查
+- 🌍 **世界观与上下文管理** - Worldview Manager、NovelState 与向量检索共同支撑跨章节衔接
+- 👀 **过程可视化** - 项目概览和 Workflow 详情页展示 Context Assembler、Critic v2、Failure Router、Local Revise、Stitching、NovelState 更新等真实过程
 - 🔍 **向量语义检索** - ChromaDB存储相关历史内容，保证剧情连贯性
 - ✅ **质量控制闭环** - Critic 打分、问题清单、修订循环和质量分析面板
 - 📱 **移动端友好阅读** - 自动短段落排版，适配手机阅读
@@ -52,6 +54,8 @@ writer/
 │   ├── orchestrator.py     # 主编排器
 │   ├── agent_contract.py   # Agent 契约定义
 │   ├── evaluation_harness.py # 章节评审标准化基座
+│   ├── workflow_optimization.py # scene anchors、Critic v2、局部修复和 stitching 工具
+│   ├── novel_state_service.py # 项目内 NovelState 动态状态层
 │   └── worldview_manager.py # 世界观状态管理
 ├── tasks/                  # Celery 异步任务
 │   ├── writing_tasks.py    # 小说生成任务
@@ -192,23 +196,40 @@ alembic upgrade head
 ```
 用户需求加载
     ↓
-策划 → 生成设定圣经 → 存入向量数据库
+Planner → 生成设定圣经、章节大纲、scene anchors → 存入向量数据库
     ↓
 对每一章：
-  1. writer 生成初稿
+  1. Context Assembler 装配章节目标、scene anchors、前文摘要、设定、NovelState 和风格约束
   ↓
-  2. system_guardrails 执行标题/格式/字数/段落等基础检查
+  2. Writer 连续生成完整章节，scene anchors 只作为内部路标
   ↓
-  3. critic 生成结构化评分与问题清单
+  3. system_guardrails 执行标题/格式/字数/段落等基础检查
   ↓
-  4. 未通过时 revise 根据问题清单修订，最多循环 2 轮
+  4. Critic v2 生成结构化诊断，问题定位到 scene/span
   ↓
-  5. evaluation_harness 标准化评审结果，写入 info.json，并同步为 Artifact
+  5. 未通过时 Failure Router 选择修复策略，Local Revise 只替换目标片段
   ↓
-  6. 保存章节 → 同步数据库 → 记录 chapter_draft / chapter_evaluation 工件
+  6. Stitching Pass 修复过渡、指代、时间跳跃、情绪断裂和语气不一致
+  ↓
+  7. evaluation_harness 标准化评审结果，写入 info.json，并同步为 Artifact
+  ↓
+  8. 保存章节 → 更新 NovelState → 同步数据库 → 记录 chapter_draft / chapter_evaluation / workflow-v2 工件
   ↓
 所有章节完成 → 可导出多种格式
 ```
+
+workflow v2 的关键原则：
+- Chapter 仍是最终叙事单位，避免把章节拆成互不连贯的小作文。
+- Scene/span 只用于规划、诊断、定位和局部修复。
+- 局部修复必须携带前后邻接段，修后必须经过 chapter-level stitching。
+- 连续两轮局部修复仍失败时，才升级为整章轻量重写。
+
+主要 Artifact 类型：
+- `scene_anchor_plan`：本章剧情路标、冲突、角色动机、状态变化和结尾钩子。
+- `chapter_critique_v2`：Critic v2 结构化诊断，包含问题维度、证据片段、严重度和修复指令。
+- `repair_trace`：局部修复批次、修复策略、替换范围和收益记录。
+- `stitching_report`：过渡、代词、时间、情绪和语气连贯性检查结果。
+- `novel_state_snapshot`：章节写前/写后的角色、时间线、伏笔和文风动态状态快照。
 
 ---
 
@@ -273,7 +294,7 @@ alembic upgrade head
 | `VECTOR_CHUNK_SIZE` | 向量数据库分块大小 | 500 |
 | `CRITIC_PASS_SCORE` | Critic 及格线 | 8 |
 
-> 注：部分历史配置项仍保留在配置文件中，当前主链路并不会全部使用。实际稳定主链路以 Planner / Writer / Critic / Revise / Guardrails / Evaluation Harness 为准。
+> 注：部分历史配置项仍保留在配置文件中，当前主链路以 Planner / Context Assembler / Writer / Guardrails / Critic v2 / Failure Router / Local Revise / Stitching / Evaluation Harness / NovelState 为准。
 
 ---
 
@@ -282,11 +303,18 @@ alembic upgrade head
 | Agent | 职责 |
 |-------|------|
 | Planner | 生成小说整体策划大纲 |
-| Writer | 生成章节初稿，重写设定错误 |
-| Critic | 章节评审、打分、输出问题清单 |
-| Revise | 根据 Critic 或用户反馈修订章节 |
+| Context Assembler | 汇总章节目标、scene anchors、前文、设定、风格和 NovelState |
+| Writer | 连续生成完整章节，按 scene anchors 推进但不拆段独立生成 |
+| Critic v2 | 章节评审、打分、输出定位到 scene/span 的结构化问题 |
+| Failure Router | 根据问题类型选择局部修复、stitching 或整章轻量重写 |
+| Revise | 根据 Critic 或用户反馈执行局部片段修复 |
+| Stitching Pass | 修复过渡、指代、时间跳跃、情绪断裂和语气不一致 |
 | Evaluation Harness | 标准化 Critic 输出，沉淀可追踪评审报告 |
-| Worldview Manager | 追踪时间线/角色/伏笔，保证全局一致性 |
+| NovelState / Worldview Manager | 追踪角色、时间线、伏笔、文风和世界观动态事实 |
+
+## 🧹 Git 与运行时产物
+
+`data/projects/**/chapters/`、`data/projects/**/info.json`、`data/projects/**/novel_state.json` 等是本地生成产物，已加入 `.gitignore`。仓库保留需求、大纲和设定等可复用输入文件；实际生成的章节、评分快照和动态状态留在本机，避免每次试跑都产生无关提交。
 
 ---
 
