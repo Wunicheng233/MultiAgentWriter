@@ -230,3 +230,59 @@ class WriterInjectionTests(unittest.TestCase):
         self.assertIn("词汇内容", result_high)
         self.assertIn("节奏内容", result_high)
         self.assertIn("例句内容", result_high)
+
+
+class CriticReviseInjectionTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_builtin = PerspectiveEngine.BUILTIN_PERSPECTIVES
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = Path(self.temp_dir)
+
+        test_file = Path(self.temp_dir) / 'test-writer.yaml'
+        with open(test_file, 'w', encoding='utf-8') as f:
+            yaml.safe_dump({
+                'name': '测试作家',
+                'genre': '测试',
+                'description': '测试',
+                'strength_recommended': 0.7,
+                'strengths': [],
+                'weaknesses': [],
+                'planner_injection': {},
+                'writer_injection': {},
+                'critic_injection': '评审标准内容',
+                'revise_injection': '修改策略内容',
+            }, f, allow_unicode=True)
+
+        self.engine = PerspectiveEngine('test-writer')
+
+    def tearDown(self):
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = self.original_builtin
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_inject_for_critic(self):
+        """Critic 注入应该在末尾添加视角评审标准"""
+        original = "原始评审 prompt"
+        result = self.engine.inject_for_critic(original)
+
+        self.assertIn("原始评审 prompt", result)
+        self.assertIn("评审标准内容", result)
+        self.assertIn("测试作家", result)
+
+    def test_inject_for_revise(self):
+        """Revise 注入应该在末尾添加修改策略"""
+        original = "原始修改 prompt"
+        result = self.engine.inject_for_revise(original)
+
+        self.assertIn("原始修改 prompt", result)
+        self.assertIn("修改策略内容", result)
+        self.assertIn("测试作家", result)
+
+    def test_no_perspective_returns_original_for_both(self):
+        """没有加载视角时都返回原始内容"""
+        engine = PerspectiveEngine()
+        original = "原始内容"
+
+        self.assertEqual(engine.inject_for_critic(original), original)
+        self.assertEqual(engine.inject_for_revise(original), original)

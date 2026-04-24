@@ -158,3 +158,51 @@ class PerspectiveEngine:
             'rhythm_principles': rhythm,
             'example_sentences': examples,
         }
+
+    def inject_for_critic(self, original_input: str, strength: float = 0.7) -> str:
+        """为 Critic 注入审美标准"""
+        if not self.perspective_data:
+            return original_input
+
+        standards = self._get_critic_injection(strength)
+
+        return f"""{original_input}
+
+---
+
+## 评审视角：{self.perspective_data['name']} 的审美标准
+{standards}
+"""
+
+    def inject_for_revise(self, original_input: str, strength: float = 0.7) -> str:
+        """为 Revise 注入修改策略"""
+        if not self.perspective_data:
+            return original_input
+
+        strategy = self._get_revise_injection(strength)
+
+        return f"""{original_input}
+
+---
+
+## 修改策略：{self.perspective_data['name']} 风格
+{strategy}
+"""
+
+    def _get_critic_injection(self, strength: float) -> str:
+        """根据强度裁剪 Critic 注入内容"""
+        content = self.perspective_data['critic_injection']
+        if strength <= 0.3:
+            # 低强度：只保留前 2 条评审标准
+            lines = content.strip().split('\n')
+            content = '\n'.join(lines[:2])
+        return content
+
+    def _get_revise_injection(self, strength: float) -> str:
+        """根据强度裁剪 Revise 注入内容"""
+        content = self.perspective_data['revise_injection']
+        if strength <= 0.3:
+            # 低强度：只保留前 2 条修改策略
+            lines = content.strip().split('\n')
+            content = '\n'.join(lines[:2])
+        return content
