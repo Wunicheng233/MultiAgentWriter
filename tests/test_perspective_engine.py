@@ -90,3 +90,65 @@ class PerspectiveFileLoadTests(unittest.TestCase):
         self.assertEqual(perspectives[0]['id'], 'test-writer')
         self.assertEqual(perspectives[0]['name'], '测试作家')
         self.assertTrue(perspectives[0]['builtin'])
+
+
+class PlannerInjectionTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_builtin = PerspectiveEngine.BUILTIN_PERSPECTIVES
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = Path(self.temp_dir)
+
+        # Create test perspective
+        test_file = Path(self.temp_dir) / 'test-writer.yaml'
+        with open(test_file, 'w', encoding='utf-8') as f:
+            yaml.safe_dump({
+                'name': '测试作家',
+                'genre': '测试',
+                'description': '测试',
+                'strength_recommended': 0.7,
+                'strengths': [],
+                'weaknesses': [],
+                'planner_injection': {
+                    'mental_models': '心智模型内容',
+                    'worldview_principles': '世界观原则内容',
+                },
+                'writer_injection': {},
+                'critic_injection': '',
+                'revise_injection': '',
+            }, f, allow_unicode=True)
+
+        self.engine = PerspectiveEngine('test-writer')
+
+    def tearDown(self):
+        PerspectiveEngine.BUILTIN_PERSPECTIVES = self.original_builtin
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_inject_for_planner_adds_header(self):
+        """Planner 注入应该在开头添加视角模式标题"""
+        original = "原始 prompt 内容"
+        result = self.engine.inject_for_planner(original)
+
+        self.assertIn("创作思维模式：测试作家", result)
+        self.assertIn("心智模型内容", result)
+        self.assertIn("世界观原则内容", result)
+        # Original content should be preserved
+        self.assertIn("原始 prompt 内容", result)
+
+    def test_inject_for_planner_with_no_perspective_returns_original(self):
+        """没有加载视角时直接返回原始内容"""
+        engine = PerspectiveEngine()
+        original = "原始 prompt 内容"
+        result = engine.inject_for_planner(original)
+
+        self.assertEqual(result, original)
+
+    def test_inject_for_planner_preserves_original_content(self):
+        """原始 prompt 的所有内容都应该被完整保留"""
+        original = "第一行\n第二行\n第三行包含特殊字符!@#$%^&*()"
+        result = self.engine.inject_for_planner(original)
+
+        self.assertIn("第一行", result)
+        self.assertIn("第二行", result)
+        self.assertIn("第三行包含特殊字符!@#$%^&*()", result)

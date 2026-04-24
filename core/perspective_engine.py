@@ -54,3 +54,53 @@ class PerspectiveEngine:
                     })
 
         return sorted(perspectives, key=lambda x: x['genre'])
+
+    def inject_for_planner(self, original_prompt: str, strength: float = 0.7) -> str:
+        """为 Planner 注入心智模型
+
+        注入位置：prompt 最开头
+        注入内容：核心心智模型、世界观构建原则
+        """
+        if not self.perspective_data:
+            return original_prompt
+
+        injection = self._get_planner_injection(strength)
+
+        return f"""
+# 创作思维模式：{self.perspective_data['name']}
+
+## 核心心智模型（请在构思时融入以下思维方式）
+{injection['mental_models']}
+
+## 世界观构建原则
+{injection['worldview_principles']}
+
+---
+
+{original_prompt}
+""".lstrip('\n')
+
+    def _get_planner_injection(self, strength: float) -> Dict[str, str]:
+        """根据强度裁剪 Planner 注入内容"""
+        data = self.perspective_data['planner_injection']
+
+        mental_models = data['mental_models']
+        worldview = data['worldview_principles']
+
+        # 根据强度裁剪
+        if strength <= 0.3:
+            # 低强度：只保留前 2 条心智模型
+            models_lines = mental_models.strip().split('\n')
+            mental_models = '\n'.join(models_lines[:2])
+            # 世界观只保留第一条
+            worldview_lines = worldview.strip().split('\n')
+            worldview = '\n'.join(worldview_lines[:1])
+        elif strength <= 0.7:
+            # 中强度：保留前 4 条心智模型 + 世界观
+            models_lines = mental_models.strip().split('\n')
+            mental_models = '\n'.join(models_lines[:4])
+
+        return {
+            'mental_models': mental_models,
+            'worldview_principles': worldview,
+        }
