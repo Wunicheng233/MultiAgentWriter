@@ -3,7 +3,6 @@ from config import PROMPTS_DIR, OUTPUTS_ROOT
 from utils.logger import logger
 from utils.runtime_context import get_current_output_dir as get_runtime_output_dir
 from utils.runtime_context import set_current_output_dir
-from core.perspective_engine import PerspectiveEngine
 
 
 def set_output_dir(novel_name: str) -> Path:
@@ -72,6 +71,7 @@ def load_prompt(agent_name: str, content_type: str = None, context: dict = None,
     # 第二步：如果指定了视角，进行视角注入
     if perspective:
         try:
+            from core.perspective_engine import PerspectiveEngine
             engine = PerspectiveEngine(perspective)
             # 使用视角推荐强度如果没指定
             strength = perspective_strength
