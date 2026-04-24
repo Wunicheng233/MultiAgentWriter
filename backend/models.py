@@ -52,6 +52,19 @@ class Project(Base):
     # 质量评分
     overall_quality_score = Column(Float, default=0.0)
     dimension_average_scores = Column(JSON, nullable=True)
+    # === 新增：创作风格配置 ===
+    # 选定的作家视角 ID（如 'liu-cixin'），None 表示默认模式
+    writer_perspective = Column(String(100), nullable=True)
+    # 是否同时应用该视角的评审标准来做 Critic
+    use_perspective_critic = Column(Boolean, default=True)
+    # 视角强度 (0.0-1.0)
+    # 0.3 = 轻微风格影响
+    # 0.7 = 完整融入心智模型和表达风格（默认）
+    # 1.0 = 完全按该作家模式创作
+    perspective_strength = Column(Float, default=0.7)
+    # 混合视角模式（可选）- JSON 格式存储
+    # 示例：[{"id": "jin-yong", "weight": 0.7}, {"id": "liu-cixin", "weight": 0.3}]
+    perspective_mix = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
