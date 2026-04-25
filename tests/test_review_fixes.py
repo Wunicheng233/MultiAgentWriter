@@ -11,7 +11,7 @@ import backend.database as database_module
 import backend.deps as deps
 import agents.writer_agent as writer_agent
 import config
-import core.orchestrator as orchestrator_module
+import backend.core.orchestrator as orchestrator_module
 import utils.file_utils as file_utils
 import utils.volc_engine as volc_engine
 import utils.vector_db as vector_db
@@ -22,7 +22,7 @@ from backend.chapter_sync import html_content_to_plain_text
 from backend.models import Chapter, ChapterVersion, GenerationTask, Project, ProjectCollaborator, ShareLink, User
 from utils.runtime_context import set_current_output_dir
 from backend.schemas import ChapterUpdate, UserCreate
-from core.orchestrator import NovelOrchestrator
+from backend.core.orchestrator import NovelOrchestrator
 from tests.base import BaseWorkflowTestCase
 
 

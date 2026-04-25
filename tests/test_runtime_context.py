@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import config
-from core.worldview_manager import WorldviewManager
+from backend.core.worldview_manager import WorldviewManager
 from utils import vector_db
 from utils.runtime_context import (
     RunContext,

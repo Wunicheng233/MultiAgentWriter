@@ -13,7 +13,7 @@ from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from core.config import settings
+from backend.core.config import settings
 from backend.models import User
 from backend.schemas import UserResponse
 

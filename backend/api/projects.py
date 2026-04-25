@@ -40,7 +40,7 @@ from backend.schemas import (
 )
 from backend.deps import get_current_user
 from backend.workflow_service import create_generation_workflow_run, serialize_workflow_run
-from core.config import settings
+from backend.core.config import settings
 
 # 导入Celery任务（可选）
 try:
@@ -394,7 +394,7 @@ def update_project_skills(
     db: Session = Depends(get_db),
 ):
     """更新项目启用的 Skill 列表，存储在 Project.config.skills.enabled。"""
-    from core.skill_runtime import SkillRegistry
+    from backend.core.skill_runtime import SkillRegistry
 
     project = check_project_access(project_id, current_user, db, require_owner=True)
     if not project:
@@ -816,7 +816,7 @@ def download_export(
 
 from pydantic import BaseModel
 from backend.models import TokenUsage, ProjectCollaborator
-from core.config import settings
+from backend.core.config import settings
 
 
 def check_project_access(

@@ -1,7 +1,7 @@
 import unittest
 from dataclasses import FrozenInstanceError, fields
 
-from core.agent_contract import AgentContract, get_agent_contract, list_agent_contracts
+from backend.core.agent_contract import AgentContract, get_agent_contract, list_agent_contracts
 
 
 class AgentContractTests(unittest.TestCase):

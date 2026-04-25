@@ -10,7 +10,7 @@ import openai
 from typing import Tuple, List, Dict, Optional
 from utils.volc_engine import call_volc_api
 from utils.logger import logger
-from core.config import settings
+from backend.core.config import settings
 from config import CRITIC_PASS_SCORE
 from utils.file_utils import load_prompt
 from utils.json_utils import parse_json_result

@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-import core.orchestrator as orchestrator_module
-from core.orchestrator import NovelOrchestrator
-from core.workflow_optimization import (
+import backend.core.orchestrator as orchestrator_module
+from backend.core.orchestrator import NovelOrchestrator
+from backend.core.workflow_optimization import (
     apply_local_patch,
     apply_stitching_patch,
     build_local_repair_context,
@@ -202,7 +202,7 @@ class WorkflowOptimizationOrchestratorTests(unittest.TestCase):
             orchestrator.dimension_scores = {"plot": [], "character": [], "hook": [], "writing": [], "setting": []}
             orchestrator.evaluation_reports = []
             orchestrator._check_cancellation = lambda: None
-            from core.novel_state_service import NovelStateService
+            from backend.core.novel_state_service import NovelStateService
             orchestrator.novel_state_service = NovelStateService(project_dir)
             orchestrator.scene_anchor_plans = []
             orchestrator.repair_traces = []

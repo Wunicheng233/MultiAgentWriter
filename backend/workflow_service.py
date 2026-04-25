@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 
 from backend.models import Artifact, Chapter, FeedbackItem, GenerationTask, Project, WorkflowRun, WorkflowStepRun
-from core.agent_contract import get_agent_contract
+from backend.core.agent_contract import get_agent_contract
 
 
 @dataclass(frozen=True)

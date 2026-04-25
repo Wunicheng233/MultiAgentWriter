@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from core.skill_runtime import SkillRegistry
+from backend.core.skill_runtime import SkillRegistry
 from backend.rate_limiter import limit_requests
 
 

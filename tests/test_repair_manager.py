@@ -4,7 +4,7 @@
 
 import unittest
 from unittest.mock import MagicMock
-from core.repair_manager import RepairManager
+from backend.core.repair_manager import RepairManager
 
 
 class TestRepairManager(unittest.TestCase):

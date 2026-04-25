@@ -1,6 +1,6 @@
 import unittest
 
-from core.evaluation_harness import (
+from backend.core.evaluation_harness import (
     build_chapter_evaluation_report,
     evaluate_chapter_with_critic,
     normalize_dimensions,

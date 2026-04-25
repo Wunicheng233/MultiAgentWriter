@@ -118,7 +118,7 @@ def load_prompt(
         perspective_strength=perspective_strength,
     )
     try:
-        from core.skill_runtime import SkillAssembler, inject_skill_layer
+        from backend.core.skill_runtime import SkillAssembler, inject_skill_layer
 
         assembled_skills = SkillAssembler().assemble(
             agent_name,

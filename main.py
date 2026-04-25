@@ -4,7 +4,7 @@
 """
 
 import sys
-from core.orchestrator import NovelOrchestrator
+from backend.core.orchestrator import NovelOrchestrator
 
 
 def main(progress_callback=None, task_id=None, generation_tasks=None):

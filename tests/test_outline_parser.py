@@ -3,7 +3,7 @@
 """
 
 import unittest
-from core.outline_parser import parse_outlines_from_setting_bible
+from backend.core.outline_parser import parse_outlines_from_setting_bible
 
 
 class TestOutlineParser(unittest.TestCase):

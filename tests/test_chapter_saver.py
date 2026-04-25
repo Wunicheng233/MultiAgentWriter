@@ -5,7 +5,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from core.chapter_saver import ChapterSaver
+from backend.core.chapter_saver import ChapterSaver
 
 
 class TestChapterSaver(unittest.TestCase):

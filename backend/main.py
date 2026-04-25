@@ -18,7 +18,7 @@ from backend.api.share import router as share_router
 from backend.api.perspectives import router as perspectives_router
 from backend.api.skills import router as skills_router
 from backend.database import Base, engine
-from core.config import settings
+from backend.core.config import settings
 from backend.rate_limiter import rate_limiter
 
 # 启动时关键配置检查

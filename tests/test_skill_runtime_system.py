@@ -49,7 +49,7 @@ class SkillRuntimeTestCase(unittest.TestCase):
 
 class SkillRegistryTests(SkillRuntimeTestCase):
     def test_registry_scans_and_loads_skills(self):
-        from core.skill_runtime.skill_registry import SkillRegistry
+        from backend.core.skill_runtime.skill_registry import SkillRegistry
 
         self.write_skill("skill-a", priority=50)
         self.write_skill("skill-b", priority=120)
@@ -62,7 +62,7 @@ class SkillRegistryTests(SkillRuntimeTestCase):
         self.assertIsNone(registry.load_skill("missing"))
 
     def test_missing_skill_md_raises_error(self):
-        from core.skill_runtime.skill_registry import SkillRegistry, SkillValidationError
+        from backend.core.skill_runtime.skill_registry import SkillRegistry, SkillValidationError
 
         skill_dir = self.temp_dir / "broken"
         skill_dir.mkdir()
@@ -73,8 +73,8 @@ class SkillRegistryTests(SkillRuntimeTestCase):
 
 class SkillAssemblerTests(SkillRuntimeTestCase):
     def test_assembler_filters_overrides_and_sorts_by_priority(self):
-        from core.skill_runtime.skill_assembler import SkillAssembler
-        from core.skill_runtime.skill_registry import SkillRegistry
+        from backend.core.skill_runtime.skill_assembler import SkillAssembler
+        from backend.core.skill_runtime.skill_registry import SkillRegistry
 
         self.write_skill("writer-only", applies_to=["writer"], priority=200)
         self.write_skill("planner-default", applies_to=["planner"], priority=50)
@@ -99,8 +99,8 @@ class SkillAssemblerTests(SkillRuntimeTestCase):
         self.assertTrue(all(item.rendered_content for item in assembled))
 
     def test_critic_can_receive_skills_when_explicitly_enabled(self):
-        from core.skill_runtime.skill_assembler import SkillAssembler
-        from core.skill_runtime.skill_registry import SkillRegistry
+        from backend.core.skill_runtime.skill_assembler import SkillAssembler
+        from backend.core.skill_runtime.skill_registry import SkillRegistry
 
         self.write_skill("critic-requested", applies_to=["critic", "writer"])
         project_config = {
@@ -120,8 +120,8 @@ class SkillAssemblerTests(SkillRuntimeTestCase):
         self.assertEqual(assembled[0].skill.id, "critic-requested")
 
     def test_zero_strength_disables_skill(self):
-        from core.skill_runtime.skill_assembler import SkillAssembler
-        from core.skill_runtime.skill_registry import SkillRegistry
+        from backend.core.skill_runtime.skill_assembler import SkillAssembler
+        from backend.core.skill_runtime.skill_registry import SkillRegistry
 
         self.write_skill("muted", applies_to=["writer"])
         project_config = {"skills": {"enabled": [{"skill_id": "muted", "config": {"strength": 0}}]}}
@@ -133,9 +133,9 @@ class SkillAssemblerTests(SkillRuntimeTestCase):
 
 class SkillInjectorTests(SkillRuntimeTestCase):
     def test_injector_adds_markers_and_replaces_placeholder(self):
-        from core.skill_runtime.skill_assembler import SkillAssembler
-        from core.skill_runtime.skill_injector import SkillInjector
-        from core.skill_runtime.skill_registry import SkillRegistry
+        from backend.core.skill_runtime.skill_assembler import SkillAssembler
+        from backend.core.skill_runtime.skill_injector import SkillInjector
+        from backend.core.skill_runtime.skill_registry import SkillRegistry
 
         self.write_skill("skill-a", applies_to=["writer"], injection="### A\n内容A")
         project_config = {"skills": {"enabled": [{"skill_id": "skill-a"}]}}
@@ -149,14 +149,14 @@ class SkillInjectorTests(SkillRuntimeTestCase):
         self.assertNotIn("{{skill_layer}}", result)
 
     def test_empty_layer_preserves_prompt_without_placeholder(self):
-        from core.skill_runtime.skill_injector import SkillInjector
+        from backend.core.skill_runtime.skill_injector import SkillInjector
 
         self.assertEqual(SkillInjector().inject("base", []), "base")
 
 
 class SafetyFilterTests(unittest.TestCase):
     def test_safety_filter_removes_roleplay_and_blocked_terms(self):
-        from core.skill_runtime.safety_filter import SafetyFilter
+        from backend.core.skill_runtime.safety_filter import SafetyFilter
 
         content = "你是某作家。\n保留这行。\n<!-- unsafe:start -->扮演内容<!-- unsafe:end -->\n政治立场"
 

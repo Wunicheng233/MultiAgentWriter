@@ -4,7 +4,7 @@ from backend.database import get_db
 from backend.models import Project, ProjectCollaborator, User
 from backend.api.auth import get_current_user
 from backend.rate_limiter import limit_requests
-from core.skill_runtime import SkillRegistry
+from backend.core.skill_runtime import SkillRegistry
 
 router = APIRouter(prefix="/perspectives", tags=["perspectives"])
 

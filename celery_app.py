@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from celery import Celery
-from core.config import settings
+from backend.core.config import settings
 
 # 配置Redis连接URL，优先从环境变量读取，默认本地
 import os

@@ -18,7 +18,7 @@ from typing import Optional, Dict
 from celery_app import celery_app
 from backend.chapter_sync import sync_chapter_file_to_db
 from backend.auth import get_user_api_key
-from core.orchestrator import GenerationCancelledError, NovelOrchestrator, WaitingForConfirmationError
+from backend.core.orchestrator import GenerationCancelledError, NovelOrchestrator, WaitingForConfirmationError
 from utils.runtime_context import (
     RunContext,
     get_current_output_dir_optional,

@@ -4,7 +4,7 @@
 
 import unittest
 from unittest.mock import MagicMock, call
-from core.progress_reporter import ProgressReporter
+from backend.core.progress_reporter import ProgressReporter
 
 
 class TestProgressReporter(unittest.TestCase):

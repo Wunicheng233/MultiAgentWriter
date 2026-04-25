@@ -6,7 +6,7 @@ from utils.file_utils import load_prompt
 
 # 优先使用新的统一配置中心，如果不存在回退到旧配置
 try:
-    from core.config import settings
+    from backend.core.config import settings
     USE_NEW_CONFIG = True
 except ImportError:
     from config import API_KEYS, BASE_URL, MODELS, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, TEMPERATURES, WRITER_MAX_TOKENS
@@ -39,7 +39,7 @@ def _get_client(agent_role: str) -> openai.OpenAI:
 
         if agent_role not in _client_cache:
             if USE_NEW_CONFIG:
-                from core.config import settings
+                from backend.core.config import settings
                 api_key = settings.get_api_key_for_agent(agent_role)
                 base_url = settings.base_url
             else:
