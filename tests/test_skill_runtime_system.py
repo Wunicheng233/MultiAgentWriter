@@ -170,7 +170,7 @@ class SafetyFilterTests(unittest.TestCase):
 
 class SkillPromptIntegrationTests(unittest.TestCase):
     def test_load_prompt_injects_project_skills_into_writer(self):
-        from utils.file_utils import load_prompt
+        from backend.utils.file_utils import load_prompt
 
         project_config = {
             "skills": {
@@ -187,7 +187,7 @@ class SkillPromptIntegrationTests(unittest.TestCase):
         self.assertIn("刘慈欣", result)
 
     def test_legacy_perspective_maps_to_skill_runtime_but_not_critic(self):
-        from utils.file_utils import load_prompt
+        from backend.utils.file_utils import load_prompt
 
         writer_prompt = load_prompt("writer", perspective="liu-cixin", perspective_strength=0.8)
         critic_prompt = load_prompt("critic", perspective="liu-cixin", perspective_strength=0.8)

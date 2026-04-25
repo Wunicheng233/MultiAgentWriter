@@ -11,7 +11,7 @@ import re
 import json
 from typing import List, Dict, Optional
 
-from utils.logger import logger
+from backend.utils.logger import logger
 from .workflow_optimization import extract_scene_anchor_blocks_by_chapter
 
 

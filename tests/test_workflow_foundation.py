@@ -11,7 +11,7 @@ import backend.api.tasks as tasks_api
 import tasks.export_tasks as export_tasks
 import tasks.writing_tasks as writing_tasks
 from backend.auth import set_user_api_key
-from utils.runtime_context import get_current_output_dir_optional, get_current_run_context_optional, set_current_output_dir
+from backend.utils.runtime_context import get_current_output_dir_optional, get_current_run_context_optional, set_current_output_dir
 from backend.models import Artifact, Chapter, FeedbackItem, GenerationTask, Project, User, WorkflowRun, WorkflowStepRun
 from backend.chapter_sync import parse_chapter_file_content, sync_chapter_file_to_db
 from backend.task_status import ACTIVE_TASK_STATUSES, get_active_project_task

@@ -19,7 +19,7 @@ from celery_app import celery_app
 from backend.chapter_sync import sync_chapter_file_to_db
 from backend.auth import get_user_api_key
 from backend.core.orchestrator import GenerationCancelledError, NovelOrchestrator, WaitingForConfirmationError
-from utils.runtime_context import (
+from backend.utils.runtime_context import (
     RunContext,
     get_current_output_dir_optional,
     get_current_run_context_optional,

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 from pathlib import Path
 
-from utils.logger import logger
+from backend.utils.logger import logger
 from config import ROOT_DIR
 
 

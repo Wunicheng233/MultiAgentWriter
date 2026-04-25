@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from utils.file_utils import write_file_atomic
+from backend.utils.file_utils import write_file_atomic
 
 
 DEFAULT_NOVEL_STATE: dict[str, Any] = {

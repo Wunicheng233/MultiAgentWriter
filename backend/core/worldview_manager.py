@@ -1,7 +1,7 @@
 import copy
 import json
-from utils.logger import logger
-from utils.runtime_context import get_current_output_dir_optional
+from backend.utils.logger import logger
+from backend.utils.runtime_context import get_current_output_dir_optional
 import config
 
 # ===================== 世界观管控核心类 =====================

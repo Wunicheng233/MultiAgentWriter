@@ -217,7 +217,7 @@ try:
     settings.prompts_dir.mkdir(exist_ok=True, parents=True)
 except OSError as e:
     import sys
-    from utils.logger import logger
+    from backend.utils.logger import logger
     logger.error(f"无法创建必要目录：{e}")
     logger.error(f"请检查目录权限：prompts_dir={settings.prompts_dir}")
     sys.exit(1)

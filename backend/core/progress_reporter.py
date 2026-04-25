@@ -8,7 +8,7 @@
 """
 
 from typing import Callable, Optional
-from utils.logger import logger
+from backend.utils.logger import logger
 
 
 class ProgressReporter:

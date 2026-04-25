@@ -9,8 +9,8 @@
 
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from utils.file_utils import save_output
-from utils.logger import logger
+from backend.utils.file_utils import save_output
+from backend.utils.logger import logger
 
 
 class ChapterSaver:

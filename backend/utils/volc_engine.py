@@ -1,8 +1,8 @@
 import openai
 import time
 import threading
-from utils.logger import logger
-from utils.file_utils import load_prompt
+from backend.utils.logger import logger
+from backend.utils.file_utils import load_prompt
 
 # 优先使用新的统一配置中心，如果不存在回退到旧配置
 try:

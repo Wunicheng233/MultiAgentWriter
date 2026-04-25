@@ -1,6 +1,6 @@
 import openai
-from utils.volc_engine import call_volc_api
-from utils.logger import logger
+from backend.utils.volc_engine import call_volc_api
+from backend.utils.logger import logger
 
 def generate_plan(
     core_requirement: str,

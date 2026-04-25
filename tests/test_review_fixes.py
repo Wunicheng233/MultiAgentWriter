@@ -12,15 +12,15 @@ import backend.deps as deps
 import agents.writer_agent as writer_agent
 import config
 import backend.core.orchestrator as orchestrator_module
-import utils.file_utils as file_utils
-import utils.volc_engine as volc_engine
-import utils.vector_db as vector_db
+import backend.utils.file_utils as file_utils
+import backend.utils.volc_engine as volc_engine
+import backend.utils.vector_db as vector_db
 from backend.api.auth import clear_api_key, refresh_api_key, register
 from backend.auth import get_password_hash, get_user_api_key, set_user_api_key
 from backend.api.chapters import restore_version, update_chapter
 from backend.chapter_sync import html_content_to_plain_text
 from backend.models import Chapter, ChapterVersion, GenerationTask, Project, ProjectCollaborator, ShareLink, User
-from utils.runtime_context import set_current_output_dir
+from backend.utils.runtime_context import set_current_output_dir
 from backend.schemas import ChapterUpdate, UserCreate
 from backend.core.orchestrator import NovelOrchestrator
 from tests.base import BaseWorkflowTestCase

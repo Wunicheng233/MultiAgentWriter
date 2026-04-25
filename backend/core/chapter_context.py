@@ -8,7 +8,7 @@
 """
 
 from typing import Tuple, List, Dict, Optional
-from utils.logger import logger
+from backend.utils.logger import logger
 from .workflow_optimization import parse_scene_anchors_from_outline, format_scene_anchors_for_prompt
 
 

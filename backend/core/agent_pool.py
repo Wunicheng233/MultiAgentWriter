@@ -15,7 +15,7 @@ import threading
 from typing import Dict, Any, Type
 from .agent_contract import AgentContract, get_agent_contract
 from .config import settings
-from utils.logger import logger
+from backend.utils.logger import logger
 
 # 导入各个Agent模块
 from backend.agents import (

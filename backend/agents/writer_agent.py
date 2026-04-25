@@ -1,8 +1,8 @@
 import re
 import openai
-from utils.volc_engine import call_volc_api
-from utils.logger import logger
-from utils.vector_db import search_reference_style, search_related_chapter_content, search_core_setting
+from backend.utils.volc_engine import call_volc_api
+from backend.utils.logger import logger
+from backend.utils.vector_db import search_reference_style, search_related_chapter_content, search_core_setting
 from config import WRITER_MAX_TOKENS
 
 

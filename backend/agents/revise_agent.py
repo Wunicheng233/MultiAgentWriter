@@ -8,11 +8,11 @@ Revise Agent - 内容修订师
 
 import json
 import openai
-from utils.volc_engine import call_volc_api
-from utils.logger import logger
+from backend.utils.volc_engine import call_volc_api
+from backend.utils.logger import logger
 from backend.core.config import settings
-from utils.file_utils import load_prompt
-from utils.json_utils import parse_json_result
+from backend.utils.file_utils import load_prompt
+from backend.utils.json_utils import parse_json_result
 
 
 def revise_chapter(

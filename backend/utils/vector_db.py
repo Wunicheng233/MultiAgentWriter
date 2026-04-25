@@ -11,8 +11,8 @@ import re
 from pathlib import Path
 import config
 from config import VECTOR_CHUNK_SIZE
-from utils.logger import logger
-from utils.runtime_context import (
+from backend.utils.logger import logger
+from backend.utils.runtime_context import (
     get_current_output_dir,
     get_current_output_dir_optional,
     get_current_run_context_optional,

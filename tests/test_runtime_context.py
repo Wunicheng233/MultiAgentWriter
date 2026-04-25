@@ -4,8 +4,8 @@ from pathlib import Path
 
 import config
 from backend.core.worldview_manager import WorldviewManager
-from utils import vector_db
-from utils.runtime_context import (
+from backend.utils import vector_db
+from backend.utils.runtime_context import (
     RunContext,
     get_current_run_context_optional,
     set_current_output_dir,

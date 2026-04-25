@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple, Callable
 from datetime import datetime
 
 from .config import settings
-from utils.file_utils import write_file_atomic
+from backend.utils.file_utils import write_file_atomic
 from .agent_pool import (
     PlannerAgent, WriterAgent, CriticAgent, ReviseAgent,
     agent_pool
@@ -33,11 +33,11 @@ from .workflow_optimization import (
     route_repair_strategy,
 )
 from .outline_parser import parse_outlines_from_setting_bible
-from utils.file_utils import save_output, load_chapter_content, set_output_dir
-from utils.runtime_context import set_current_output_dir
-from utils.yaml_utils import load_user_requirements
-from utils.logger import logger
-from utils.vector_db import (
+from backend.utils.file_utils import save_output, load_chapter_content, set_output_dir
+from backend.utils.runtime_context import set_current_output_dir
+from backend.utils.yaml_utils import load_user_requirements
+from backend.utils.logger import logger
+from backend.utils.vector_db import (
     load_setting_bible_to_db,
     search_related_chapter_content,
     search_core_setting,

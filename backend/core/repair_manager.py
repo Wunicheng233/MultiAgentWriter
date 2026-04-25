@@ -8,7 +8,7 @@
 """
 
 from typing import List, Dict, Tuple, Optional, Any
-from utils.logger import logger
+from backend.utils.logger import logger
 
 
 class RepairManager:
