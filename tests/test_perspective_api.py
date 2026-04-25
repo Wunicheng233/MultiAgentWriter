@@ -2,6 +2,7 @@ import unittest
 from sqlalchemy import inspect
 from backend.database import Base, engine
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from backend.main import app
 
 
@@ -18,6 +19,16 @@ class ModelFieldTests(unittest.TestCase):
         self.assertTrue(hasattr(Project, 'perspective_mix'))
 
         print("✅ Project 模型包含所有视角相关字段")
+
+    def test_project_response_exposes_perspective_fields(self):
+        """ProjectResponse 应该把视角配置返回给前端"""
+        from backend.schemas import ProjectResponse
+
+        fields = ProjectResponse.model_fields
+        self.assertIn("user_id", fields)
+        self.assertIn("writer_perspective", fields)
+        self.assertIn("use_perspective_critic", fields)
+        self.assertIn("perspective_strength", fields)
 
 
 class PerspectiveAPITests(unittest.TestCase):
@@ -65,3 +76,33 @@ class PerspectiveAPITests(unittest.TestCase):
         """获取不存在的视角应该返回 404"""
         response = self.client.get("/api/perspectives/nonexistent-writer-12345")
         self.assertEqual(response.status_code, 404)
+
+    def test_update_request_accepts_documented_perspective_id_alias(self):
+        """更新接口兼容白皮书中的 perspective_id 字段"""
+        from backend.api.perspectives import UpdateProjectPerspectiveRequest
+
+        request = UpdateProjectPerspectiveRequest(
+            perspective_id="liu-cixin",
+            perspective_strength=0.8,
+            use_perspective_critic=True,
+        )
+        self.assertEqual(request.selected_perspective(), "liu-cixin")
+
+    def test_update_request_rejects_invalid_strength(self):
+        """风格强度必须限制在 0.0 到 1.0"""
+        from backend.api.perspectives import UpdateProjectPerspectiveRequest
+
+        with self.assertRaises(ValidationError):
+            UpdateProjectPerspectiveRequest(perspective="liu-cixin", perspective_strength=1.5)
+
+    def test_update_project_perspective_requires_authentication(self):
+        """修改项目视角配置必须登录，避免跨用户篡改项目配置"""
+        response = self.client.put(
+            "/api/perspectives/project/1",
+            json={
+                "perspective": "liu-cixin",
+                "perspective_strength": 0.8,
+                "use_perspective_critic": True,
+            },
+        )
+        self.assertEqual(response.status_code, 401)

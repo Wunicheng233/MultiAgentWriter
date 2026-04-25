@@ -48,6 +48,7 @@ def generate_chapter(
     client: openai.OpenAI = None,
     perspective: str = None,
     perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     constraints_text = ""
     if constraints:
@@ -101,9 +102,9 @@ def generate_chapter(
 
     # 第一次生成
     if client:
-        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, client=client, perspective=perspective, perspective_strength=perspective_strength)
+        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
     else:
-        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, perspective=perspective, perspective_strength=perspective_strength)
+        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
     fixed_result = _check_and_fix_title(result, chapter_num)
 
     if fixed_result != result:
@@ -119,6 +120,7 @@ def generate_chapter(
                 client=client,
                 perspective=perspective,
                 perspective_strength=perspective_strength,
+                project_config=project_config,
             )
         else:
             result = call_volc_api(
@@ -129,6 +131,7 @@ def generate_chapter(
                 context=context,
                 perspective=perspective,
                 perspective_strength=perspective_strength,
+                project_config=project_config,
             )
         fixed_result = _check_and_fix_title(result, chapter_num)
 
@@ -143,6 +146,7 @@ def rewrite_chapter(
     client: openai.OpenAI = None,
     perspective: str = None,
     perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     # 从原文提取章节号（如果没传入）
     if chapter_num is None:
@@ -185,9 +189,9 @@ def rewrite_chapter(
 
     logger.info("✍️  内容生成Agent正在修改章节...")
     if client:
-        result = call_volc_api("writer", user_input, client=client, perspective=perspective, perspective_strength=perspective_strength)
+        result = call_volc_api("writer", user_input, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
     else:
-        result = call_volc_api("writer", user_input, perspective=perspective, perspective_strength=perspective_strength)
+        result = call_volc_api("writer", user_input, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
 
     # 检测并修复标题
     if chapter_num:

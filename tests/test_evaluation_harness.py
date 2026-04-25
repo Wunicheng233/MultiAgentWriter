@@ -52,7 +52,7 @@ class EvaluationHarnessTests(unittest.TestCase):
 
     def test_evaluate_chapter_with_critic_wraps_legacy_critic_tuple(self):
         class FakeCritic:
-            def critic_chapter(self, chapter_content, setting_bible, chapter_outline, content_type):
+            def critic_chapter(self, chapter_content, setting_bible, chapter_outline, content_type, perspective: str = None, perspective_strength: float = 0.7):
                 return True, 9, {"plot": 9, "character": 8}, []
 
         report = evaluate_chapter_with_critic(
@@ -72,7 +72,7 @@ class EvaluationHarnessTests(unittest.TestCase):
 
     def test_evaluate_chapter_with_critic_preserves_v2_diagnostics(self):
         class FakeCritic:
-            def critic_chapter(self, chapter_content, setting_bible, chapter_outline, content_type):
+            def critic_chapter(self, chapter_content, setting_bible, chapter_outline, content_type, perspective: str = None, perspective_strength: float = 0.7):
                 critique_v2 = {
                     "style_match": [
                         {

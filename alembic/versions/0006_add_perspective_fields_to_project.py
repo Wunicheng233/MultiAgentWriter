@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '0006'
@@ -22,9 +21,9 @@ def upgrade() -> None:
     """Upgrade schema."""
     # Add the four new perspective fields to projects table
     op.add_column('projects', sa.Column('writer_perspective', sa.String(length=100), nullable=True))
-    op.add_column('projects', sa.Column('use_perspective_critic', sa.Boolean(), nullable=False, server_default=sa.text('true')))
+    op.add_column('projects', sa.Column('use_perspective_critic', sa.Boolean(), nullable=False, server_default=sa.true()))
     op.add_column('projects', sa.Column('perspective_strength', sa.Float(), nullable=False, server_default=sa.text('0.7')))
-    op.add_column('projects', sa.Column('perspective_mix', postgresql.JSON(astext_type=sa.Text()), nullable=True))
+    op.add_column('projects', sa.Column('perspective_mix', sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

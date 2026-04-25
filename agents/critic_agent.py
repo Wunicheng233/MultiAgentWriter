@@ -31,7 +31,10 @@ def critic_chapter(
     setting_bible: str,
     chapter_outline: str,
     content_type: str = "novel",
-    client: openai.OpenAI = None
+    client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> Tuple:
     """
     评审章节，输出 JSON 格式的评审结果。
@@ -42,6 +45,8 @@ def critic_chapter(
         chapter_outline: 当前章节的大纲
         content_type: 内容类型 (novel/short_story/script)
         client: OpenAI客户端
+        perspective: 写作视角
+        perspective_strength: 视角强度
 
     Returns:
         (passed: 是否通过, score: 总分 1-10, dimensions: 各维度评分, issues: 问题列表)
@@ -68,7 +73,15 @@ def critic_chapter(
 
     logger.info(f"🔍 Critic Agent正在评审章节，等待结果...")
     temperature = settings.get_temperature_for_agent("critic")
-    result = call_volc_api("critic", template, temperature=temperature, client=client)
+    result = call_volc_api(
+        "critic",
+        template,
+        temperature=temperature,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
     # 解析 JSON 结果
     data = parse_json_result(result)

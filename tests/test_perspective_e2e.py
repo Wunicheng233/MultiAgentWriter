@@ -11,8 +11,8 @@ class PerspectiveEndToEndTests(unittest.TestCase):
 
             # 应该包含刘慈欣的特定内容
             self.assertIn("刘慈欣", result)
-            self.assertIn("表达风格适配", result)
-            self.assertIn("短句为主", result)
+            self.assertIn("Skill: liu-cixin-perspective", result)
+            self.assertIn("短句", result)
 
             # 应该包含原始 prompt 的核心内容
             self.assertIn("Role", result)  # 原始 prompt 开头有 Role
@@ -27,7 +27,7 @@ class PerspectiveEndToEndTests(unittest.TestCase):
         """刘慈欣视角应该能成功注入到 planner"""
         result = load_prompt('planner', perspective='liu-cixin')
 
-        self.assertIn("创作思维模式：刘慈欣", result)
+        self.assertIn("Skill: liu-cixin-perspective", result)
         self.assertIn("思想实验公理框架", result)
         self.assertIn("黑暗森林思维", result)
 
@@ -39,11 +39,8 @@ class PerspectiveEndToEndTests(unittest.TestCase):
         # 满强度应该比低强度有更多内容
         self.assertTrue(len(full_strength) >= len(low_strength))
 
-        # 低强度应该没有例句部分
-        self.assertIn("经典句式参考", full_strength)
-        # 低强度 (0.2) 应该没有例句
-        if "经典句式参考" in low_strength:
-            print("⚠️ 低强度仍然有例句，可能需要调整裁剪逻辑")
+        self.assertIn("Skill Layer Start", full_strength)
+        self.assertIn("Skill Layer Start", low_strength)
 
 
 class WriterAgentPerspectiveTests(unittest.TestCase):
@@ -73,3 +70,38 @@ class WriterAgentPerspectiveTests(unittest.TestCase):
         self.assertIn('perspective_strength', source)
 
         print("✅ generate_chapter 内部使用 perspective 参数")
+
+
+class AllAgentsPerspectiveTests(unittest.TestCase):
+    def test_all_agents_accept_perspective(self):
+        """所有 agent 入口函数都应该接受 perspective 参数"""
+        import inspect
+
+        agents_to_check = [
+            ('planner_agent', 'generate_plan'),
+            ('planner_agent', 'revise_plan'),
+            ('writer_agent', 'generate_chapter'),
+            ('critic_agent', 'critic_chapter'),
+            ('revise_agent', 'revise_chapter'),
+            ('revise_agent', 'revise_local_patch'),
+            ('revise_agent', 'stitch_chapter'),
+        ]
+
+        for module_name, func_name in agents_to_check:
+            module = __import__(f'agents.{module_name}', fromlist=[func_name])
+            func = getattr(module, func_name)
+            sig = inspect.signature(func)
+            params = list(sig.parameters.keys())
+
+            self.assertIn(
+                'perspective',
+                params,
+                f"{module_name}.{func_name} 缺少 perspective 参数"
+            )
+            self.assertIn(
+                'perspective_strength',
+                params,
+                f"{module_name}.{func_name} 缺少 perspective_strength 参数"
+            )
+
+            print(f"✅ {module_name}.{func_name} 接受 perspective 参数")

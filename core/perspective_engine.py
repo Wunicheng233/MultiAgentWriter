@@ -115,6 +115,17 @@ class PerspectiveEngine:
             return original_prompt
 
         injection = self._get_writer_injection(strength)
+        sections = [
+            ("句式偏好", injection["sentence_patterns"]),
+            ("词汇特征", injection["vocabulary_traits"]),
+            ("节奏感", injection["rhythm_principles"]),
+            ("经典句式参考（可直接化用）", injection["example_sentences"]),
+        ]
+        rendered_sections = "\n\n".join(
+            f"### {title}\n{content}"
+            for title, content in sections
+            if str(content).strip()
+        )
 
         return f"""{original_prompt}
 
@@ -122,17 +133,7 @@ class PerspectiveEngine:
 
 ## 表达风格适配：{self.perspective_data['name']} 模式
 
-### 句式偏好
-{injection['sentence_patterns']}
-
-### 词汇特征
-{injection['vocabulary_traits']}
-
-### 节奏感
-{injection['rhythm_principles']}
-
-### 经典句式参考（可直接化用）
-{injection['example_sentences']}
+{rendered_sections}
 """
 
     def _get_writer_injection(self, strength: float) -> Dict[str, str]:

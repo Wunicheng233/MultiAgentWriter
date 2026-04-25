@@ -52,6 +52,9 @@ data/projects/**/novel_state.json
 data/projects/**/feedback_*.txt
 data/projects/**/exports/
 
+# Temporary review notes
+tmp-code-review.md
+
 # Environment variables
 .env
 .env.*

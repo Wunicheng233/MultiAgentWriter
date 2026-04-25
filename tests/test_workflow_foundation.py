@@ -614,7 +614,7 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.close()
 
         class FakeOrchestrator:
-            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None):
+            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None, writer_perspective=None, perspective_strength=0.7, use_perspective_critic=True):
                 self.progress_callback = progress_callback
 
             def run_full_novel(self):
@@ -701,7 +701,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         test_case = self
 
         class FakeOrchestrator:
-            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None):
+            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None, writer_perspective=None, perspective_strength=0.7, use_perspective_critic=True):
                 self.project_dir = Path(project_dir)
                 self.progress_callback = progress_callback
                 test_case.assertEqual(user_api_key, custom_api_key)
@@ -854,7 +854,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         test_case = self
 
         class FakeOrchestrator:
-            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None):
+            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None, writer_perspective=None, perspective_strength=0.7, use_perspective_critic=True):
                 self.progress_callback = progress_callback
                 self.cancellation_checker = cancellation_checker
 
@@ -1651,7 +1651,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         self.assertFalse(feedback_file.exists())
 
         class FakeOrchestrator:
-            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None):
+            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None, writer_perspective=None, perspective_strength=0.7, use_perspective_critic=True):
                 self.project_dir = Path(project_dir)
 
             def run_full_novel(self):
@@ -1719,7 +1719,7 @@ class WorkflowFoundationTests(unittest.TestCase):
             db.close()
 
         class FakeOrchestrator:
-            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None):
+            def __init__(self, project_dir, progress_callback, user_api_key, cancellation_checker=None, writer_perspective=None, perspective_strength=0.7, use_perspective_critic=True):
                 self.project_dir = Path(project_dir)
 
             def run_full_novel(self):

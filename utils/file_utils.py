@@ -24,14 +24,37 @@ def get_current_output_dir() -> Path:
     return get_runtime_output_dir()
 
 
-def load_prompt(agent_name: str, content_type: str = None, context: dict = None, perspective: str = None, perspective_strength: float = None) -> str:
+LEGACY_PERSPECTIVE_SKILL_MAPPING = {
+    "liu-cixin": "liu-cixin-perspective",
+    "jin-yong": "jin-yong-perspective",
+    "haruki-murakami": "haruki-murakami-perspective",
+    "jk-rowling": "jk-rowling-perspective",
+    "ernest-hemingway": "ernest-hemingway-perspective",
+    "yu-hua": "yu-hua-perspective",
+    "lu-xun": "lu-xun-perspective",
+}
+
+
+def load_prompt(
+    agent_name: str,
+    content_type: str = None,
+    context: dict = None,
+    perspective: str = None,
+    perspective_strength: float = None,
+    skill_ids: list[str] = None,
+    skill_configs: dict = None,
+    project_config: dict = None,
+) -> str:
     """
     从prompts文件夹加载对应Agent的提示词
     :param agent_name: Agent名称（planner/guardian/writer/editor/compliance）
     :param content_type: 内容类型（full_novel/short_story/script），如果有则加载特定prompt
     :param context: 占位符替换上下文，key 是占位符名称（不含 {{}}），value 是替换内容
-    :param perspective: 作家视角ID，若指定则注入对应视角内容
-    :param perspective_strength: 视角注入强度 (0.0-1.0)，默认使用视角推荐强度
+    :param perspective: 旧版作家视角ID，若指定会映射到内置 Skill（兼容旧项目）
+    :param perspective_strength: 旧版视角注入强度 (0.0-1.0)
+    :param skill_ids: 显式启用的 Skill ID 列表
+    :param skill_configs: 每个 Skill 的配置
+    :param project_config: 项目配置，支持 config.skills.enabled
     :return: 提示词内容
     """
     # 第一步：加载基础提示词文件
@@ -68,8 +91,32 @@ def load_prompt(agent_name: str, content_type: str = None, context: dict = None,
         with open(prompt_file, "r", encoding="utf-8") as f:
             content = f.read().strip()
 
-    # 第二步：如果指定了视角，进行视角注入
-    if perspective:
+    # 第二步：装配并注入 Skill Layer。旧 perspective 会优先映射为内置 Skill。
+    skill_project_config = _project_config_with_legacy_perspective(
+        project_config=project_config,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        skill_ids=skill_ids,
+    )
+    try:
+        from core.skill_runtime import SkillAssembler, SkillInjector
+
+        assembled_skills = SkillAssembler().assemble(
+            agent_name,
+            project_config=skill_project_config,
+            skill_ids=skill_ids,
+            skill_configs=skill_configs,
+        )
+        content = SkillInjector().inject(content, assembled_skills)
+        skill_injected = bool(assembled_skills)
+    except Exception as e:
+        logger.warning(f"Skill 注入失败，使用原始prompt继续: {e}")
+        skill_injected = False
+        if "{{skill_layer}}" in content:
+            content = content.replace("{{skill_layer}}", "")
+
+    # 第三步：无法映射为 Skill 的旧 perspective 才回退到旧注入器。Critic 保持中立，不做旧注入。
+    if perspective and not skill_injected and agent_name != "critic":
         try:
             from core.perspective_engine import PerspectiveEngine
             engine = PerspectiveEngine(perspective)
@@ -93,7 +140,7 @@ def load_prompt(agent_name: str, content_type: str = None, context: dict = None,
         except Exception as e:
             logger.warning(f"视角注入失败，使用原始prompt: {e}")
 
-    # 第三步：替换占位符
+    # 第四步：替换占位符
     if context:
         # 替换所有 {{key}} 占位符
         for key, value in context.items():
@@ -101,6 +148,35 @@ def load_prompt(agent_name: str, content_type: str = None, context: dict = None,
 
     # 返回最终内容
     return content
+
+
+def _project_config_with_legacy_perspective(
+    project_config: dict = None,
+    perspective: str = None,
+    perspective_strength: float = None,
+    skill_ids: list[str] = None,
+) -> dict:
+    project_config = dict(project_config or {})
+    configured_skills = ((project_config.get("skills") or {}).get("enabled") or [])
+    if configured_skills or skill_ids or not perspective:
+        return project_config
+
+    skill_id = LEGACY_PERSPECTIVE_SKILL_MAPPING.get(perspective)
+    if not skill_id:
+        return project_config
+
+    project_config["skills"] = {
+        "enabled": [
+            {
+                "skill_id": skill_id,
+                "config": {
+                    "strength": perspective_strength if perspective_strength is not None else 0.7,
+                    "mode": "style_only",
+                },
+            }
+        ]
+    }
+    return project_config
 
 
 def save_output(content: str, filename: str, output_dir: Path = None) -> Path:

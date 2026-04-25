@@ -11,7 +11,10 @@ def generate_plan(
     genre: str = "",
     total_words: str = "",
     core_hook: str = "",
-    client: openai.OpenAI = None
+    client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     # 构建占位符替换上下文
     context = {}
@@ -33,13 +36,25 @@ def generate_plan(
     内容类型：{content_type}
     """
     logger.info(f"📝 顶层策划Agent正在生成{content_type}方案...")
-    return call_volc_api("planner", user_input, content_type=content_type, context=context, client=client)
+    return call_volc_api(
+        "planner",
+        user_input,
+        content_type=content_type,
+        context=context,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
 def revise_plan(
     original_plan: str,
     feedback: str,
     original_requirement: str,
-    client: openai.OpenAI = None
+    client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     user_input = f"""
     原需求：{original_requirement}
@@ -47,4 +62,11 @@ def revise_plan(
     修改意见：{feedback}
     """
     logger.info("📝 顶层策划Agent正在修改方案...")
-    return call_volc_api("planner", user_input, client=client)
+    return call_volc_api(
+        "planner",
+        user_input,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )

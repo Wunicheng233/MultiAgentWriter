@@ -8,6 +8,7 @@ import type { BadgeVariant } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { ProgressBar } from '../components/ProgressBar'
+import SkillSelector from '../components/SkillSelector'
 import {
   addCollaborator,
   cleanStuckTasks,
@@ -548,11 +549,11 @@ export const ProjectOverview: React.FC = () => {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-content space-y-6">
+      <div className="mx-auto max-w-content space-y-8">
         <Card variant="elevated" className="overflow-hidden">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-10 p-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-6 flex flex-wrap items-center gap-3">
                 <Link to="/">
                   <Button variant="secondary" size="sm">返回书架</Button>
                 </Link>
@@ -565,39 +566,38 @@ export const ProjectOverview: React.FC = () => {
                 <Badge variant="secondary">{getModeLabel(data)}</Badge>
               </div>
 
-              <h1 className="text-3xl md:text-4xl">{data.name}</h1>
-              <p className="mt-3 max-w-2xl text-body">
-                {data.description || '这是当前项目的比赛版总控台，用来查看创作进度、工作流状态和最终交付能力。'}
+              <h1 className="text-[clamp(2rem,4vw,2.75rem)] leading-tight">{data.name}</h1>
+              <p className="mt-4 max-w-xl text-body">
+                {data.description}
               </p>
 
-              <div className="mt-5 flex flex-wrap gap-3 text-sm text-secondary">
+              <div className="mt-5 flex flex-wrap gap-4 text-sm text-secondary">
                 <span>目标章节 {targetStart} - {targetEnd}</span>
                 <span>每章约 {config?.chapter_word_count ?? 2000} 字</span>
                 {config?.genre && <span>{config.genre}</span>}
-                {config?.target_platform && <span>面向 {config.target_platform}</span>}
               </div>
 
               {config?.core_hook && (
-                <div className="mt-5 rounded-comfortable border border-terracotta/15 bg-parchment/55 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Hook</p>
+                <div className="mt-6 rounded-comfortable border border-terracotta/15 bg-terracotta/5 p-5">
+                  <p className="text-xs uppercase tracking-[0.22em] text-terracotta/70">Concept</p>
                   <p className="mt-2 text-lg text-inkwell">{config.core_hook}</p>
                 </div>
               )}
             </div>
 
-            <div className="w-full max-w-lg rounded-comfortable border border-border bg-parchment/55 p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-secondary">Current Focus</p>
-              <h2 className="mt-2 text-2xl">{runSummary.headline}</h2>
+            <div className="w-full max-w-lg rounded-2xl border border-sage/15 bg-sage/5 p-6">
+              <p className="text-xs uppercase tracking-[0.25em] text-sage">Current Focus</p>
+              <h2 className="mt-3 text-xl">{runSummary.headline}</h2>
               <p className="mt-2 text-secondary">{runSummary.detail}</p>
 
-              <div className="mt-5 space-y-3">
+              <div className="mt-6">
                 <ProgressBar
                   progress={workflowProgress}
                   message={data.current_generation_task?.current_step || `已完成 ${completedChapters}/${targetChapters || completedChapters || 1} 章`}
                 />
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-6 flex flex-wrap gap-3">
                 {runSummary.ctaHref ? (
                   <Link to={runSummary.ctaHref}>
                     <Button variant="primary">{runSummary.ctaLabel}</Button>
@@ -610,11 +610,6 @@ export const ProjectOverview: React.FC = () => {
                 <Link to={`/projects/${projectId}/chapters`}>
                   <Button variant="secondary">查看章节</Button>
                 </Link>
-                {workflow && (
-                  <Link to={`/projects/${projectId}/workflows/${workflow.id}`}>
-                    <Button variant="tertiary">查看当前 Run</Button>
-                  </Link>
-                )}
               </div>
             </div>
           </div>
@@ -647,19 +642,16 @@ export const ProjectOverview: React.FC = () => {
         </div>
 
         <div className={`${activeTab === 'workflow' ? 'grid' : 'hidden'} gap-6 xl:grid-cols-[1.3fr_0.9fr]`}>
-          <Card>
-            <div className="flex items-start justify-between gap-4">
+          <Card className="p-8">
+            <div className="mb-8 flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Flow Story</p>
-                <h2 className="mt-2 text-2xl">比赛演示主路径</h2>
-                <p className="mt-2 text-secondary">
-                  这一页把“从创意到作品交付”的关键路径收成一张总览，方便团队和评委理解系统现在推进到哪里。
-                </p>
+                <p className="text-xs uppercase tracking-[0.25em] text-secondary">Flow Story</p>
+                <h2 className="mt-2 text-2xl">创作主路径</h2>
               </div>
               <Badge variant="secondary">Workflow First</Badge>
             </div>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-5">
               {flowSteps.map((step, index) => {
                 const status = getFlowStepStatus(data, step.key)
 
@@ -688,11 +680,11 @@ export const ProjectOverview: React.FC = () => {
             </div>
           </Card>
 
-          <Card>
-            <p className="text-xs uppercase tracking-[0.22em] text-secondary">Run Detail</p>
-            <h2 className="mt-2 text-2xl">当前运行摘要</h2>
+          <Card className="p-8">
+            <p className="text-xs uppercase tracking-[0.25em] text-secondary">Run Detail</p>
+            <h2 className="mt-2 text-2xl">当前运行</h2>
 
-            <div className="mt-5 space-y-3">
+            <div className="mt-6 space-y-3">
               {workflowMeta.length > 0 ? (
                 workflowMeta.map(item => (
                   <div key={item.label} className="rounded-standard border border-border bg-parchment/60 p-3">
@@ -722,15 +714,14 @@ export const ProjectOverview: React.FC = () => {
           </Card>
         </div>
 
-        <Card className={`${activeTab === 'workflow' ? 'block' : 'hidden'} p-5`}>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <Card className={`${activeTab === 'workflow' ? 'block' : 'hidden'} p-8`}>
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Agent Strip</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-secondary">Agent Strip</p>
               <h2 className="mt-2 text-2xl">智能体状态</h2>
             </div>
-            <Badge variant="secondary">按需展开到 Workflow Run</Badge>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-4">
           {agentCards.map(agent => {
             const state = agentStates[agent.key]
 
@@ -760,12 +751,12 @@ export const ProjectOverview: React.FC = () => {
           </div>
         </Card>
 
-        <div className={`${activeTab === 'setup' || activeTab === 'delivery' ? 'grid' : 'hidden'} gap-6 xl:grid-cols-[1.1fr_0.9fr]`}>
-          <Card className={activeTab === 'setup' ? '' : 'hidden'}>
-            <div className="flex items-center justify-between gap-4">
+        <div className={`${activeTab === 'setup' || activeTab === 'delivery' ? 'grid' : 'hidden'} gap-8 xl:grid-cols-[1.1fr_0.9fr]`}>
+          <Card className={`${activeTab === 'setup' ? 'p-8' : 'hidden'}`}>
+            <div className="flex items-center justify-between gap-4 mb-6">
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Project Setup</p>
-                <h2 className="mt-2 text-2xl">创作配置与需求</h2>
+                <p className="text-xs uppercase tracking-[0.25em] text-secondary">Project Setup</p>
+                <h2 className="mt-2 text-2xl">创作配置</h2>
               </div>
               {data.status === 'draft' && (
                 <Button
@@ -894,14 +885,33 @@ export const ProjectOverview: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Skill 配置 */}
+            <div className="mt-8 pt-6 border-t border-border">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-secondary">
+                    Skill Runtime
+                  </p>
+                  <h2 className="mt-1 text-2xl">启用创作 Skill</h2>
+                </div>
+              </div>
+              <p className="text-sm text-secondary mb-6">
+                Skill 会按 Planner、Writer、Revise 的职责精确注入，Critic 保持中立质量标尺。
+              </p>
+              <SkillSelector
+                projectId={projectId}
+                enabledSkills={config?.skills?.enabled ?? []}
+              />
+            </div>
           </Card>
 
-          <div className={activeTab === 'delivery' ? 'space-y-6' : 'hidden'}>
-            <Card>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Quality</p>
+          <div className={activeTab === 'delivery' ? 'space-y-8' : 'hidden'}>
+            <Card className="p-8">
+              <p className="text-xs uppercase tracking-[0.25em] text-secondary">Quality</p>
               <h2 className="mt-2 text-2xl">质量与交付</h2>
 
-              <div className="mt-5 space-y-4">
+              <div className="mt-6 space-y-4">
                 {data.overall_quality_score > 0 ? (
                   <ProgressBar progress={data.overall_quality_score * 10} message={`总体评分 ${data.overall_quality_score.toFixed(1)}/10`} />
                 ) : (

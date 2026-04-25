@@ -26,11 +26,11 @@ from .system_guardrails import run_system_guardrails, GuardrailResult
 from .workflow_optimization import (
     apply_local_patch,
     build_local_repair_context,
-    extract_scene_anchor_blocks_by_chapter,
     format_scene_anchors_for_prompt,
     parse_scene_anchors_from_outline,
     route_repair_strategy,
 )
+from .outline_parser import parse_outlines_from_setting_bible
 from utils.file_utils import save_output, load_chapter_content, set_output_dir
 from utils.runtime_context import set_current_output_dir
 from utils.yaml_utils import load_user_requirements
@@ -73,12 +73,19 @@ class NovelOrchestrator:
         progress_callback: Optional[Callable[[int, str], None]] = None,
         user_api_key: Optional[str] = None,
         cancellation_checker: Optional[Callable[[], None]] = None,
+        writer_perspective: str = None,
+        perspective_strength: float = 0.7,
+        use_perspective_critic: bool = True,
+        project_config: Optional[Dict] = None,
     ):
         """
         初始化编排器
         :param project_dir: 项目输出根目录，如果为None则从user_requirements读取书名创建
         :param progress_callback: 进度回调 f(percent: int, message: str) -> None
         :param user_api_key: 用户自己的火山引擎 API Key，如果为 None 则使用系统配置
+        :param writer_perspective: 选定的作家视角 ID
+        :param perspective_strength: 视角强度 (0.0-1.0)，默认 0.7
+        :param use_perspective_critic: 是否同时在 Critic 评审中使用视角
         """
         if project_dir:
             self.output_dir = Path(project_dir)
@@ -91,6 +98,11 @@ class NovelOrchestrator:
         self.project_dir = project_dir
         # 默认字数，防止提前访问导致AttributeError
         self.chapter_word_count = "2000"
+        # 项目视角配置
+        self.writer_perspective = writer_perspective
+        self.perspective_strength = perspective_strength
+        self.use_perspective_critic = use_perspective_critic
+        self.project_config = project_config or {}
 
         # 创建 OpenAI 客户端，使用用户 API Key（如果提供了）
         api_key = user_api_key or settings.get_api_key_for_agent("default")
@@ -115,6 +127,8 @@ class NovelOrchestrator:
         self.revise: ReviseAgent = ReviseAgent(
             client, settings.get_model_for_agent("revise"), settings.get_temperature_for_agent("revise")
         )
+        for agent in (self.planner, self.writer, self.critic, self.revise):
+            agent.project_config = self.project_config
 
         # 运行时状态
         self.req: Dict = {}
@@ -192,6 +206,8 @@ class NovelOrchestrator:
             content_type=self.content_type,
             chapter_index=chapter_index,
             revision_round=revision_round,
+            perspective=None,
+            perspective_strength=self.perspective_strength,
         )
         if not hasattr(self, "evaluation_reports"):
             self.evaluation_reports = []
@@ -204,128 +220,13 @@ class NovelOrchestrator:
     def parse_outlines_from_setting_bible(self) -> List[Dict]:
         """
         从 Planner 输出的设定圣经中解析分章大纲。
-        支持两种格式：
-        1. 传统格式：每个章节单独一行，以"第X章"开头
-        2. 表格格式：Markdown表格，第一列包含"第X章"（Planner默认输出格式）
-        最终存储结构化数据可以在 chapter_outlines 数组。
-
-        Returns:
-            [
-                {
-                    "chapter_num": int,
-                    "title": str,
-                    "outline": str,  # 本章目标、核心冲突、结尾钩子
-                }
-            ]
+        委托给 outline_parser 模块。
         """
-        if not self.setting_bible:
-            return []
-
-        outlines = []
-        lines = self.setting_bible.split('\n')
-
-        import re
-        # 匹配行首的 "第X章"（传统格式）
-        chapter_pattern = re.compile(r'^(#\s*)?第\s*(\d+)\s*章[:：]?\s*(.*)$')
-        # 匹配表格单元格中的 "第X章"（支持 "| 第X章 | ..." 格式）
-        table_chapter_pattern = re.compile(r'第\s*(\d+)\s*章')
-
-        current_chapter = None
-        current_title = ""
-        current_outline_parts = []
-        in_scene_anchor_section = False
-
-        for line in lines:
-            line_stripped = line.strip()
-            if re.match(r"^#+\s*.*scene[_\s-]*anchors", line_stripped, re.IGNORECASE):
-                in_scene_anchor_section = True
-                continue
-            if in_scene_anchor_section:
-                continue
-
-            # 优先检查是否是表格行中的章节（Planner默认输出格式）
-            # 格式: | 第1章 | 本章目标 | 核心冲突 | 结尾钩子 |
-            match_in_table = table_chapter_pattern.search(line)
-            if match_in_table:
-                chapter_num = int(match_in_table.group(1))
-                # 从表格行提取各列
-                columns = [col.strip() for col in line.split('|') if col.strip()]
-                if len(columns) >= 4:
-                    # columns[0] = "第1章", columns[1] = "本章目标", columns[2] = "核心冲突", columns[3] = "结尾钩子"
-                    outline_text = f"本章目标：{columns[1]}\n核心冲突：{columns[2]}\n结尾钩子：{columns[3]}"
-
-                    # 保存上一章
-                    if current_chapter is not None:
-                        outlines.append({
-                            "chapter_num": current_chapter,
-                            "title": current_title,
-                            "outline": '\n'.join(current_outline_parts).strip() if current_outline_parts else outline_text,
-                            "target_word_count": int(self.chapter_word_count)
-                        })
-                    # 开始新一章
-                    current_chapter = chapter_num
-                    current_title = f"第{chapter_num}章"
-                    current_outline_parts = [outline_text]
-                    continue
-
-            # 再检查是否是传统格式（行首就是第X章）
-            match = chapter_pattern.match(line_stripped)
-            if match and not match_in_table:  # 避免重复匹配表格行
-                # 保存上一章
-                if current_chapter is not None and (current_outline_parts or current_title):
-                    outlines.append({
-                        "chapter_num": current_chapter,
-                        "title": current_title,
-                        "outline": '\n'.join(current_outline_parts).strip(),
-                        "target_word_count": int(self.chapter_word_count)
-                        })
-                # 开始新一章
-                current_chapter = int(match.group(2))
-                current_title = match.group(3).strip()
-                current_outline_parts = []
-            elif current_chapter is not None and line_stripped:
-                current_outline_parts.append(line_stripped)
-
-        # 保存最后一章
-        if current_chapter is not None:
-            outlines.append({
-                "chapter_num": current_chapter,
-                "title": current_title,
-                "outline": '\n'.join(current_outline_parts).strip() if current_outline_parts else f"第{current_chapter}章",
-                "target_word_count": int(self.chapter_word_count)
-                })
-
-        # 去重并按章节号排序
-        outlines = sorted(outlines, key=lambda x: x["chapter_num"])
-        # 移除重复章节号（保留第一个）
-        seen = set()
-        unique_outlines = []
-        for o in outlines:
-            if o["chapter_num"] not in seen:
-                unique_outlines.append(o)
-                seen.add(o["chapter_num"])
-
-        anchor_blocks = extract_scene_anchor_blocks_by_chapter(self.setting_bible)
-        for outline in unique_outlines:
-            anchor_block = anchor_blocks.get(outline["chapter_num"])
-            if anchor_block:
-                outline["outline"] = (
-                    f"{outline['outline']}\n\n"
-                    f"{json.dumps(anchor_block, ensure_ascii=False, indent=2)}"
-                )
-
-        # 如果没有解析到结构化大纲，创建一个简单的大纲
-        if not unique_outlines and self.plan:
-            # 回退：将整个plan作为唯一一章的大纲
-            unique_outlines = [{
-                "chapter_num": 1,
-                "title": "",
-                "outline": self.plan,
-                "target_word_count": int(self.chapter_word_count)
-            }]
-
-        logger.info(f"从设定圣经解析出 {len(unique_outlines)} 个章节大纲")
-        return unique_outlines
+        return parse_outlines_from_setting_bible(
+            setting_bible=self.setting_bible,
+            plan=self.plan,
+            chapter_word_count=self.chapter_word_count,
+        )
 
     def run_planner(
         self,
@@ -421,7 +322,11 @@ class NovelOrchestrator:
                         if feedback:
                             self._check_cancellation()
                             logger.info(f"找到策划方案用户反馈，根据反馈重新优化...")
-                            self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
+                            self.plan = self.planner.revise_plan(
+                                self.plan, feedback, self.original_requirement,
+                                perspective=self.writer_perspective,
+                                perspective_strength=self.perspective_strength,
+                            )
                             self.setting_bible = self.plan
                             # 删除反馈文件，避免下次重复使用
                             feedback_plan_path.unlink()
@@ -436,7 +341,9 @@ class NovelOrchestrator:
 
                     self.plan = self.planner.generate_plan(
                         core_requirement, target_platform, self.chapter_word_count, self.content_type,
-                        world_bible=world_bible, genre=genre, total_words=str(total_words), core_hook=core_hook
+                        world_bible=world_bible, genre=genre, total_words=str(total_words), core_hook=core_hook,
+                        perspective=self.writer_perspective,
+                        perspective_strength=self.perspective_strength,
                     )
                     # 在精简架构中，Planner直接输出完整的设定圣经+分章大纲
                     self.setting_bible = self.plan
@@ -468,7 +375,11 @@ class NovelOrchestrator:
                         confirmed, feedback = confirmation_handler(self.plan[:2000])
                         if feedback and feedback.strip():
                             self._check_cancellation()
-                            self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
+                            self.plan = self.planner.revise_plan(
+                                self.plan, feedback, self.original_requirement,
+                                perspective=self.writer_perspective,
+                                perspective_strength=self.perspective_strength,
+                            )
                             self.setting_bible = self.plan
                 else:
                     import sys
@@ -484,7 +395,11 @@ class NovelOrchestrator:
                         while confirm != "y":
                             self._check_cancellation()
                             feedback = input("请输入修改意见：\n")
-                            self.plan = self.planner.revise_plan(self.plan, feedback, self.original_requirement)
+                            self.plan = self.planner.revise_plan(
+                                self.plan, feedback, self.original_requirement,
+                                perspective=self.writer_perspective,
+                                perspective_strength=self.perspective_strength,
+                            )
                             self.setting_bible = self.plan
                             print("\n" + "="*80)
                             print("📝 修改后的方案预览：")
@@ -687,6 +602,8 @@ class NovelOrchestrator:
                     "repair_strategy": issue.get("fix_strategy"),
                 },
                 self.setting_bible,
+                perspective=self.writer_perspective,
+                perspective_strength=self.perspective_strength,
             )
             patched_content, applied = apply_local_patch(current_content, patch or {})
             trace_item = {
@@ -716,6 +633,8 @@ class NovelOrchestrator:
             current_content,
             issues,
             self.setting_bible,
+            perspective=self.writer_perspective,
+            perspective_strength=self.perspective_strength,
         )
         self._report_workflow_event(
             f"Workflow v2 · 第{chapter_index}章 Revise：局部定位不足，已回退整章轻量修订"
@@ -735,7 +654,13 @@ class NovelOrchestrator:
             })
             return chapter_content
 
-        stitched = stitcher(chapter_content, repair_trace, self.setting_bible)
+        stitched = stitcher(
+            chapter_content,
+            repair_trace,
+            self.setting_bible,
+            perspective=self.writer_perspective,
+            perspective_strength=self.perspective_strength,
+        )
         applied = bool(stitched and stitched != chapter_content)
         self.stitching_reports.append({
             "artifact_type": "stitching_report",
@@ -811,7 +736,9 @@ class NovelOrchestrator:
             related_content,
             None,  # 精简架构不需要世界观约束由Critic检查
             target_word_count=target_word_count,
-            content_type=content_type
+            content_type=content_type,
+            perspective=self.writer_perspective,
+            perspective_strength=self.perspective_strength,
         )
         logger.info(f"第 {chapter_index} 章初稿生成完成")
         self._check_cancellation()
@@ -1030,7 +957,9 @@ class NovelOrchestrator:
                     current_content = self.revise.revise_chapter(
                         current_content,
                         user_issue,
-                        self.setting_bible
+                        self.setting_bible,
+                        perspective=self.writer_perspective,
+                        perspective_strength=self.perspective_strength,
                     )
                     # 再次评审
                     passed, score, dimensions, issues = self._run_critic_harness(

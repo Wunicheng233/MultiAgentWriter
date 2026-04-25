@@ -298,7 +298,7 @@ class ReviewFixRegressionTests(unittest.TestCase):
         original_load_prompt = file_utils.load_prompt
         original_sleep = volc_engine.time.sleep
         try:
-            file_utils.load_prompt = lambda agent_role, content_type=None, context=None, perspective=None, perspective_strength=None: captured_contexts.append(context) or "system"
+            file_utils.load_prompt = lambda agent_role, content_type=None, context=None, perspective=None, perspective_strength=None, **kwargs: captured_contexts.append(context) or "system"
             volc_engine.time.sleep = lambda seconds: None
             result = volc_engine.call_volc_api(
                 agent_role="writer",
@@ -583,16 +583,20 @@ class ReviewFixRegressionTests(unittest.TestCase):
         orchestrator.content_type = "novel"
         orchestrator.dimension_scores = {"plot": [], "character": [], "hook": [], "writing": [], "setting": []}
         orchestrator.allow_plot_adjustment = False
+        # 视角配置（默认值）
+        orchestrator.writer_perspective = None
+        orchestrator.perspective_strength = 0.7
+        orchestrator.use_perspective_critic = True
         orchestrator.run_planner = lambda confirmation_handler=None: "bible"
         orchestrator._report_progress = lambda *args, **kwargs: None
         orchestrator.run_chapter_generation = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should use feedback rewrite path"))
 
         class FakeRevise:
-            def revise_chapter(self, existing_content, issues, setting_bible):
+            def revise_chapter(self, existing_content, issues, setting_bible, perspective: str = None, perspective_strength: float = 0.7):
                 return "重写后的章节内容"
 
         class FakeCritic:
-            def critic_chapter(self, current_content, setting_bible, outline, content_type):
+            def critic_chapter(self, current_content, setting_bible, outline, content_type, perspective: str = None, perspective_strength: float = 0.7):
                 return True, 9, {"plot": 9, "character": 9, "hook": 9, "writing": 9, "setting": 9}, []
 
         orchestrator.revise = FakeRevise()
@@ -641,6 +645,10 @@ class ReviewFixRegressionTests(unittest.TestCase):
         orchestrator.content_type = "novel"
         orchestrator.dimension_scores = {"plot": [], "character": [], "hook": [], "writing": [], "setting": []}
         orchestrator.allow_plot_adjustment = False
+        # 视角配置（默认值）
+        orchestrator.writer_perspective = None
+        orchestrator.perspective_strength = 0.7
+        orchestrator.use_perspective_critic = True
         orchestrator.run_planner = lambda confirmation_handler=None: "bible"
         orchestrator._report_progress = lambda *args, **kwargs: None
         orchestrator.run_chapter_generation = lambda *args, **kwargs: (_ for _ in ()).throw(

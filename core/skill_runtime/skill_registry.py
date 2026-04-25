@@ -1,0 +1,196 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+class SkillValidationError(ValueError):
+    """Raised when a skill directory is malformed."""
+
+
+@dataclass(frozen=True)
+class Skill:
+    id: str
+    name: str
+    description: str
+    version: str
+    author: str
+    applies_to: list[str]
+    priority: int
+    tags: list[str] = field(default_factory=list)
+    config_schema: dict[str, Any] = field(default_factory=dict)
+    safety_tags: list[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    injection_content: str = ""
+    injection_by_agent: dict[str, str] = field(default_factory=dict)
+    path: Path | None = None
+
+    def injection_for(self, agent_name: str) -> str:
+        return (
+            self.injection_by_agent.get(agent_name)
+            or self.injection_by_agent.get("all")
+            or self.injection_content
+        )
+
+    def to_summary(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "author": self.author,
+            "applies_to": self.applies_to,
+            "priority": self.priority,
+            "tags": self.tags,
+            "config_schema": self.config_schema,
+            "safety_tags": self.safety_tags,
+            "dependencies": self.dependencies,
+        }
+
+
+class SkillRegistry:
+    DEFAULT_SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
+    REQUIRED_FIELDS = {
+        "id",
+        "name",
+        "description",
+        "version",
+        "author",
+        "applies_to",
+        "priority",
+    }
+
+    def __init__(self, skills_dir: str | Path | None = None):
+        self.skills_dir = Path(skills_dir) if skills_dir else self.DEFAULT_SKILLS_DIR
+        self._cache: dict[str, Skill] = {}
+
+    def list_skills(self) -> list[Skill]:
+        if not self.skills_dir.exists():
+            return []
+
+        skills: list[Skill] = []
+        for skill_dir in sorted(path for path in self.skills_dir.iterdir() if path.is_dir()):
+            skill = self.load_skill(skill_dir.name)
+            if skill is not None:
+                skills.append(skill)
+        return sorted(skills, key=lambda skill: (skill.priority, skill.id))
+
+    def list_skill_summaries(self) -> list[dict[str, Any]]:
+        return [skill.to_summary() for skill in self.list_skills()]
+
+    def load_skill(self, skill_id: str) -> Skill | None:
+        if not skill_id:
+            return None
+        if skill_id in self._cache:
+            return self._cache[skill_id]
+
+        skill_dir = self.skills_dir / skill_id
+        if not skill_dir.exists() or not skill_dir.is_dir():
+            return None
+
+        metadata_path = skill_dir / "skill.json"
+        injection_path = skill_dir / "injection.md"
+        skill_md_path = skill_dir / "SKILL.md"
+
+        if metadata_path.exists() or injection_path.exists():
+            if not metadata_path.exists() or not injection_path.exists():
+                raise SkillValidationError(f"Skill '{skill_id}' must include skill.json and injection.md")
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            missing = self.REQUIRED_FIELDS - set(metadata)
+            if missing:
+                raise SkillValidationError(f"Skill '{skill_id}' missing required fields: {sorted(missing)}")
+            if metadata["id"] != skill_id:
+                raise SkillValidationError(f"Skill directory '{skill_id}' does not match metadata id '{metadata['id']}'")
+            frontmatter, body = self._parse_injection_file(injection_path.read_text(encoding="utf-8"))
+        elif skill_md_path.exists():
+            frontmatter, body = self._parse_injection_file(skill_md_path.read_text(encoding="utf-8"))
+            metadata = self._metadata_from_skill_md(skill_id, frontmatter)
+        else:
+            raise SkillValidationError(f"Skill '{skill_id}' must include either skill.json/injection.md or SKILL.md")
+
+        injection_by_agent = {
+            key: str(value).strip()
+            for key, value in frontmatter.items()
+            if key in {"all", "planner", "writer", "critic", "revise"} and value
+        }
+        if frontmatter.get("target") == "all" and body:
+            injection_by_agent.setdefault("all", body)
+
+        skill = Skill(
+            id=metadata["id"],
+            name=metadata["name"],
+            description=metadata["description"],
+            version=str(metadata["version"]),
+            author=metadata["author"],
+            applies_to=list(metadata["applies_to"]),
+            priority=int(metadata["priority"]),
+            tags=list(metadata.get("tags") or []),
+            config_schema=dict(metadata.get("config_schema") or {}),
+            safety_tags=list(metadata.get("safety_tags") or []),
+            dependencies=list(metadata.get("dependencies") or []),
+            injection_content=body,
+            injection_by_agent=injection_by_agent,
+            path=skill_dir,
+        )
+        self._cache[skill_id] = skill
+        return skill
+
+    def _metadata_from_skill_md(self, skill_id: str, frontmatter: dict[str, Any]) -> dict[str, Any]:
+        skill_type = str(frontmatter.get("type") or "general")
+        default_applies_to = ["planner", "writer", "revise"]
+        priority = 100 if skill_type == "perspective" else 80
+        tags = [skill_type]
+        if skill_type == "perspective":
+            tags.append("author-style")
+
+        return {
+            "id": skill_id,
+            "name": str(frontmatter.get("name") or skill_id),
+            "description": str(frontmatter.get("description") or ""),
+            "version": str(frontmatter.get("version") or "1.0"),
+            "author": str(frontmatter.get("author") or "external-skill"),
+            "applies_to": list(frontmatter.get("applies_to") or default_applies_to),
+            "priority": int(frontmatter.get("priority") or priority),
+            "tags": list(frontmatter.get("tags") or tags),
+            "config_schema": dict(frontmatter.get("config_schema") or self._default_config_schema()),
+            "safety_tags": list(frontmatter.get("safety_tags") or ["safe_for_all"]),
+            "dependencies": list(frontmatter.get("dependencies") or []),
+        }
+
+    def _default_config_schema(self) -> dict[str, Any]:
+        return {
+            "strength": {
+                "type": "float",
+                "default": 0.7,
+                "min": 0.0,
+                "max": 1.0,
+                "label": "注入强度",
+                "description": "数值越高，Skill 对提示词的影响越明显",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["style_only", "full"],
+                "default": "style_only",
+                "label": "注入模式",
+                "description": "style_only 会过滤角色扮演和敏感内容",
+            },
+        }
+
+    def _parse_injection_file(self, content: str) -> tuple[dict[str, Any], str]:
+        text = content.strip()
+        if not text.startswith("---"):
+            return {}, text
+
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            return {}, text
+        frontmatter_text = parts[1].strip()
+        body = parts[2].strip()
+        frontmatter = yaml.safe_load(frontmatter_text) or {}
+        if not isinstance(frontmatter, dict):
+            frontmatter = {}
+        return frontmatter, body

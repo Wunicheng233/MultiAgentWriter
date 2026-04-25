@@ -18,7 +18,10 @@ def revise_chapter(
     original_chapter: str,
     critic_issues: list,
     setting_bible: str,
-    client: openai.OpenAI = None
+    client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     """
     根据 Critic 的问题清单修订章节。
@@ -28,6 +31,8 @@ def revise_chapter(
         critic_issues: Critic 输出的 issues 数组（已经解析为Python列表）
         setting_bible: 完整设定圣经（用于核验）
         client: OpenAI客户端
+        perspective: 写作视角
+        perspective_strength: 视角强度
 
     Returns:
         修订后的完整章节正文
@@ -49,7 +54,15 @@ def revise_chapter(
 
     logger.info(f"✂️  Revise Agent正在修订章节，问题数: {len(critic_issues)}")
     temperature = settings.get_temperature_for_agent("revise")
-    return call_volc_api("revise", template, temperature=temperature, client=client)
+    return call_volc_api(
+        "revise",
+        template,
+        temperature=temperature,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
 
 def revise_local_patch(
@@ -58,6 +71,9 @@ def revise_local_patch(
     local_context: dict,
     setting_bible: str,
     client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> dict:
     """Revise only the target fragment with adjacent context preserved."""
     prompt_path = PROMPTS_DIR / "revise_local_patch.md"
@@ -76,7 +92,15 @@ def revise_local_patch(
 
     logger.info("✂️  Revise Agent正在执行局部片段修复")
     temperature = settings.get_temperature_for_agent("revise")
-    result = call_volc_api("revise", template, temperature=temperature, client=client)
+    result = call_volc_api(
+        "revise",
+        template,
+        temperature=temperature,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
     patch = _parse_json_result(result)
     if patch:
         return {
@@ -96,6 +120,9 @@ def stitch_chapter(
     repair_trace: list,
     setting_bible: str,
     client: openai.OpenAI = None,
+    perspective: str = None,
+    perspective_strength: float = 0.7,
+    project_config: dict = None,
 ) -> str:
     """Run a bounded stitching pass after local repairs."""
     prompt_path = PROMPTS_DIR / "stitch.md"
@@ -113,7 +140,15 @@ def stitch_chapter(
 
     logger.info("🪡 Revise Agent正在执行章节拼接连贯性修复")
     temperature = settings.get_temperature_for_agent("revise")
-    result = call_volc_api("revise", template, temperature=temperature, client=client)
+    result = call_volc_api(
+        "revise",
+        template,
+        temperature=temperature,
+        client=client,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
     data = _parse_json_result(result)
     if data and data.get("chapter_content"):
         return str(data["chapter_content"]).strip()

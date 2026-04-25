@@ -14,6 +14,8 @@ import type {
   TaskStatus,
   WorkflowRun,
   WorkflowRunListResponse,
+  SkillDefinition,
+  EnabledSkillConfig,
 } from '../types/api'
 
 // ========== Auth ==========
@@ -110,6 +112,21 @@ export async function getProjectArtifact(
 
 export async function updateProject(projectId: number, data: Partial<ProjectCreate>): Promise<Project> {
   const res = await api.put<Project>(`/projects/${projectId}`, data)
+  return res.data
+}
+
+// ========== Skills ==========
+
+export async function listSkills(): Promise<{ skills: SkillDefinition[] }> {
+  const res = await api.get<{ skills: SkillDefinition[] }>('/skills')
+  return res.data
+}
+
+export async function updateProjectSkills(
+  projectId: number,
+  data: { enabled: EnabledSkillConfig[] }
+): Promise<Project> {
+  const res = await api.post<Project>(`/projects/${projectId}/skills`, data)
   return res.data
 }
 
@@ -363,5 +380,55 @@ export async function saveReadingProgress(
   data: { chapter_index: number; position: number; percentage: number }
 ): Promise<{status: string}> {
   const res = await api.post(`/projects/${projectId}/progress`, data)
+  return res.data
+}
+
+// ==================== Perspectives API ====================
+
+export interface Perspective {
+  id: string;
+  name: string;
+  genre: string;
+  description: string;
+  strength_recommended: number;
+  builtin: boolean;
+  strengths: string[];
+  weaknesses: string[];
+}
+
+export interface PerspectiveDetail extends Perspective {
+  preview: {
+    planner_injection: string;
+    writer_injection: string;
+    critic_injection: string;
+  };
+}
+
+export interface UpdateProjectPerspectiveRequest {
+  perspective: string | null;
+  perspective_strength: number;
+  use_perspective_critic: boolean;
+}
+
+export async function listPerspectives(): Promise<{ perspectives: Perspective[] }> {
+  const res = await api.get<{ perspectives: Perspective[] }>('/perspectives/')
+  return res.data
+}
+
+export async function getPerspectiveDetail(perspectiveId: string): Promise<PerspectiveDetail> {
+  const res = await api.get<PerspectiveDetail>(`/perspectives/${perspectiveId}`)
+  return res.data
+}
+
+export async function updateProjectPerspective(
+  projectId: number,
+  data: UpdateProjectPerspectiveRequest
+): Promise<{
+  status: string;
+  writer_perspective: string | null;
+  perspective_strength: number;
+  use_perspective_critic: boolean;
+}> {
+  const res = await api.put(`/perspectives/project/${projectId}`, data)
   return res.data
 }

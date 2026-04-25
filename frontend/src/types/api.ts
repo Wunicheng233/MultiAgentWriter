@@ -15,7 +15,34 @@ export interface ProjectConfig {
   skip_plan_confirmation?: boolean
   skip_chapter_confirmation?: boolean
   allow_plot_adjustment?: boolean
-  [key: string]: JsonValue | undefined
+  skills?: ProjectSkillsConfig
+  [key: string]: unknown
+}
+
+export interface ProjectSkillsConfig {
+  enabled?: EnabledSkillConfig[]
+  [key: string]: unknown
+}
+
+export interface SkillDefinition {
+  id: string
+  name: string
+  description: string
+  version: string
+  author: string
+  applies_to: string[]
+  priority: number
+  tags: string[]
+  config_schema: Record<string, JsonValue>
+  safety_tags: string[]
+  dependencies: string[]
+}
+
+export interface EnabledSkillConfig {
+  [key: string]: unknown
+  skill_id: string
+  applies_to_override?: string[]
+  config?: Record<string, JsonValue>
 }
 
 export interface User {
@@ -49,6 +76,10 @@ export interface Project {
   updated_at: string
   chapters?: Chapter[]
   current_generation_task?: GenerationTask
+  // 视角配置（部分 API 可能不返回这些字段）
+  writer_perspective?: string | null
+  perspective_strength?: number
+  use_perspective_critic?: boolean
 }
 
 export interface ArtifactSummary {

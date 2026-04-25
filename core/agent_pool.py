@@ -46,16 +46,20 @@ class PlannerAgent(BaseAgent):
     def __init__(self, client: openai.OpenAI, model: str, temperature: float):
         super().__init__("planner", client, model, temperature)
 
-    def generate_plan(self, core_requirement: str, target_platform: str, chapter_word_count: str, content_type: str = "full_novel", world_bible: str = "", genre: str = "", total_words: str = "", core_hook: str = "") -> str:
+    def generate_plan(self, core_requirement: str, target_platform: str, chapter_word_count: str, content_type: str = "full_novel", world_bible: str = "", genre: str = "", total_words: str = "", core_hook: str = "", perspective: str = None, perspective_strength: float = 0.7) -> str:
         return planner_agent.generate_plan(
             core_requirement, target_platform, chapter_word_count, content_type,
             world_bible=world_bible, genre=genre, total_words=total_words, core_hook=core_hook,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
-    def revise_plan(self, original_plan: str, feedback: str, original_requirement: str) -> str:
+    def revise_plan(self, original_plan: str, feedback: str, original_requirement: str, perspective: str = None, perspective_strength: float = 0.7) -> str:
         return planner_agent.revise_plan(
             original_plan, feedback, original_requirement,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
@@ -66,15 +70,19 @@ class WriterAgent(BaseAgent):
     def __init__(self, client: openai.OpenAI, model: str, temperature: float):
         super().__init__("writer", client, model, temperature)
 
-    def generate_chapter(self, setting_bible: str, plan: str, chapter_num: int, prev_chapter_end: str = "", related_content: str = "", constraints: dict = None, target_word_count: int = 2000, content_type: str = "novel") -> str:
+    def generate_chapter(self, setting_bible: str, plan: str, chapter_num: int, prev_chapter_end: str = "", related_content: str = "", constraints: dict = None, target_word_count: int = 2000, content_type: str = "novel", perspective: str = None, perspective_strength: float = 0.7) -> str:
         return writer_agent.generate_chapter(
             setting_bible, plan, chapter_num, prev_chapter_end, related_content, constraints, target_word_count, content_type,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
-    def rewrite_chapter(self, setting_bible: str, original_draft: str, feedback: str, chapter_num: int = None) -> str:
+    def rewrite_chapter(self, setting_bible: str, original_draft: str, feedback: str, chapter_num: int = None, perspective: str = None, perspective_strength: float = 0.7) -> str:
         return writer_agent.rewrite_chapter(
             setting_bible, original_draft, feedback, chapter_num,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
@@ -85,9 +93,11 @@ class CriticAgent(BaseAgent):
     def __init__(self, client: openai.OpenAI, model: str, temperature: float):
         super().__init__("critic", client, model, temperature)
 
-    def critic_chapter(self, chapter_content: str, setting_bible: str, chapter_outline: str, content_type: str = "novel") -> tuple:
+    def critic_chapter(self, chapter_content: str, setting_bible: str, chapter_outline: str, content_type: str = "novel", perspective: str = None, perspective_strength: float = 0.7) -> tuple:
         return critic_agent.critic_chapter(
             chapter_content, setting_bible, chapter_outline, content_type,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
@@ -98,21 +108,27 @@ class ReviseAgent(BaseAgent):
     def __init__(self, client: openai.OpenAI, model: str, temperature: float):
         super().__init__("revise", client, model, temperature)
 
-    def revise_chapter(self, original_chapter: str, critic_issues: list, setting_bible: str) -> str:
+    def revise_chapter(self, original_chapter: str, critic_issues: list, setting_bible: str, perspective: str = None, perspective_strength: float = 0.7) -> str:
         return revise_agent.revise_chapter(
             original_chapter, critic_issues, setting_bible,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
-    def revise_local_patch(self, original_chapter: str, repair_issue: dict, local_context: dict, setting_bible: str) -> dict:
+    def revise_local_patch(self, original_chapter: str, repair_issue: dict, local_context: dict, setting_bible: str, perspective: str = None, perspective_strength: float = 0.7) -> dict:
         return revise_agent.revise_local_patch(
             original_chapter, repair_issue, local_context, setting_bible,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 
-    def stitch_chapter(self, chapter_content: str, repair_trace: list, setting_bible: str) -> str:
+    def stitch_chapter(self, chapter_content: str, repair_trace: list, setting_bible: str, perspective: str = None, perspective_strength: float = 0.7) -> str:
         return revise_agent.stitch_chapter(
             chapter_content, repair_trace, setting_bible,
+            perspective=perspective, perspective_strength=perspective_strength,
+            project_config=getattr(self, "project_config", None),
             client=self.client
         )
 

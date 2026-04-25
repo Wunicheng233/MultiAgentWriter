@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
+from backend.database import get_db
+from backend.deps import get_current_user
+from backend.models import Project, User
 from core.perspective_engine import PerspectiveEngine
 
 router = APIRouter(prefix="/perspectives", tags=["perspectives"])
@@ -67,44 +71,50 @@ async def get_perspective_detail(perspective_id: str):
 
 class UpdateProjectPerspectiveRequest(BaseModel):
     perspective: Optional[str] = None
-    perspective_strength: float = 0.7
+    perspective_id: Optional[str] = None
+    perspective_strength: float = Field(0.7, ge=0.0, le=1.0)
     use_perspective_critic: bool = True
+
+    def selected_perspective(self) -> Optional[str]:
+        """兼容前端当前字段 perspective 和白皮书中的 perspective_id。"""
+        return self.perspective if self.perspective is not None else self.perspective_id
 
 
 @router.put("/project/{project_id}")
 async def update_project_perspective(
     project_id: int,
     request: UpdateProjectPerspectiveRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """更新项目的创作风格配置"""
-    from backend.database import SessionLocal
-    from backend.models import Project
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.user_id == current_user.id,
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    db = SessionLocal()
-    try:
-        project = db.query(Project).filter(Project.id == project_id).first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    selected_perspective = request.selected_perspective()
 
-        # 验证 perspective 是否有效
-        if request.perspective is not None:
-            try:
-                PerspectiveEngine(request.perspective)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid perspective: {request.perspective}")
+    # 验证 perspective 是否有效
+    if selected_perspective is not None:
+        try:
+            PerspectiveEngine(selected_perspective)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid perspective: {selected_perspective}")
 
-        # 更新字段
-        project.writer_perspective = request.perspective
-        project.perspective_strength = request.perspective_strength
-        project.use_perspective_critic = request.use_perspective_critic
+    # 更新字段
+    project.writer_perspective = selected_perspective
+    project.perspective_strength = request.perspective_strength
+    project.use_perspective_critic = request.use_perspective_critic
 
-        db.commit()
+    db.commit()
+    db.refresh(project)
 
-        return {
-            "status": "ok",
-            "writer_perspective": project.writer_perspective,
-            "perspective_strength": project.perspective_strength,
-            "use_perspective_critic": project.use_perspective_critic,
-        }
-    finally:
-        db.close()
+    return {
+        "status": "ok",
+        "writer_perspective": project.writer_perspective,
+        "perspective_strength": project.perspective_strength,
+        "use_perspective_critic": project.use_perspective_critic,
+    }

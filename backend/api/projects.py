@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List
+from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -54,6 +55,16 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 # 项目文件根目录
 PROJECTS_ROOT = settings.root_dir / "data" / "projects"
+
+
+class EnabledSkillConfig(BaseModel):
+    skill_id: str
+    applies_to_override: List[str] | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class UpdateProjectSkillsRequest(BaseModel):
+    enabled: List[EnabledSkillConfig] = Field(default_factory=list)
 
 
 @router.get("", response_model=ProjectListResponse, summary="列出用户所有项目")
@@ -370,6 +381,49 @@ def update_project(
         if hasattr(project, field):
             setattr(project, field, value)
 
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/skills", response_model=ProjectResponse, summary="更新项目 Skill 配置")
+def update_project_skills(
+    project_id: int,
+    payload: UpdateProjectSkillsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """更新项目启用的 Skill 列表，存储在 Project.config.skills.enabled。"""
+    from core.skill_runtime import SkillRegistry
+
+    project = check_project_access(project_id, current_user, db, require_owner=True)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="项目不存在",
+        )
+
+    registry = SkillRegistry()
+    enabled = []
+    for item in payload.enabled:
+        if registry.load_skill(item.skill_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Skill 不存在: {item.skill_id}",
+            )
+        enabled_item: dict[str, Any] = {
+            "skill_id": item.skill_id,
+            "config": item.config or {},
+        }
+        if item.applies_to_override is not None:
+            enabled_item["applies_to_override"] = item.applies_to_override
+        enabled.append(enabled_item)
+
+    config = dict(project.config or {})
+    skills_config = dict(config.get("skills") or {})
+    skills_config["enabled"] = enabled
+    config["skills"] = skills_config
+    project.config = config
     db.commit()
     db.refresh(project)
     return project

@@ -8,6 +8,7 @@
 import re
 import json
 import yaml
+import inspect
 from pathlib import Path
 from datetime import datetime
 from celery import Task
@@ -405,12 +406,31 @@ def generate_novel_task(
             api_key_to_use = user_api_key.strip()
 
         # 创建编排器，传入进度回调和用户 API Key
-        orchestrator = NovelOrchestrator(
-            project_dir=project_dir,
-            progress_callback=progress_callback,
-            user_api_key=api_key_to_use,
-            cancellation_checker=ensure_not_cancelled,
-        )
+        # 从项目读取视角配置（如果存在）
+        writer_perspective = None
+        perspective_strength = 0.7
+        use_perspective_critic = True
+        project_config = {}
+        if task_record is not None and task_record.project_id:
+            project = db.query(Project).filter(Project.id == task_record.project_id).first()
+            if project:
+                writer_perspective = project.writer_perspective
+                perspective_strength = project.perspective_strength if project.perspective_strength is not None else 0.7
+                use_perspective_critic = project.use_perspective_critic if project.use_perspective_critic is not None else True
+                project_config = project.config or {}
+
+        orchestrator_kwargs = {
+            "project_dir": project_dir,
+            "progress_callback": progress_callback,
+            "user_api_key": api_key_to_use,
+            "cancellation_checker": ensure_not_cancelled,
+            "writer_perspective": writer_perspective,
+            "perspective_strength": perspective_strength,
+            "use_perspective_critic": use_perspective_critic,
+        }
+        if "project_config" in inspect.signature(NovelOrchestrator).parameters:
+            orchestrator_kwargs["project_config"] = project_config
+        orchestrator = NovelOrchestrator(**orchestrator_kwargs)
 
         # 执行完整生成流程，可能需要等待人工确认
         try:

@@ -183,6 +183,7 @@ class ChapterSummary(BaseModel):
 
 class ProjectResponse(BaseModel):
     id: int
+    user_id: int
     name: str
     description: Optional[str]
     content_type: str
@@ -192,6 +193,9 @@ class ProjectResponse(BaseModel):
     file_path: Optional[str]
     overall_quality_score: float
     dimension_average_scores: Optional[Dict] = None
+    writer_perspective: Optional[str] = None
+    perspective_strength: float = 0.7
+    use_perspective_critic: bool = True
     created_at: datetime
     updated_at: datetime
     chapters: Optional[List[ChapterSummary]] = None
