@@ -202,6 +202,13 @@ class WorkflowOptimizationOrchestratorTests(unittest.TestCase):
             orchestrator.dimension_scores = {"plot": [], "character": [], "hook": [], "writing": [], "setting": []}
             orchestrator.evaluation_reports = []
             orchestrator._check_cancellation = lambda: None
+            from core.novel_state_service import NovelStateService
+            orchestrator.novel_state_service = NovelStateService(project_dir)
+            orchestrator.scene_anchor_plans = []
+            orchestrator.repair_traces = []
+            orchestrator.stitching_reports = []
+            orchestrator.novel_state_snapshots = []
+            orchestrator.chapter_scores = []
             # 视角配置：局部修复和 stitching 也必须继承同一作家风格
             orchestrator.writer_perspective = "liu-cixin"
             orchestrator.perspective_strength = 0.8

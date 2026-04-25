@@ -7,6 +7,9 @@ description: |
   当用户提到「用金庸的方式写」「金庸式武侠构思」「如果金庸写这个故事」时使用。
   也适用于：长篇小说结构设计、人物弧线规划、历史题材创作、传统叙事技巧应用。
 type: perspective
+tags: ["perspective", "author-style"]
+applies_to: ["planner", "writer", "revise"]
+priority: 50
 调研时间: 2026-04-23
 ---
 

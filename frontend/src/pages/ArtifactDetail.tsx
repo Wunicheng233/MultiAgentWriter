@@ -23,17 +23,20 @@ function formatDateTime(value?: string): string {
 export const ArtifactDetail: React.FC = () => {
   const { id, artifactId } = useParams<{ id: string; artifactId: string }>()
   const [searchParams] = useSearchParams()
-  const projectId = parseInt(id!, 10)
-  const currentArtifactId = parseInt(artifactId!, 10)
+  const projectId = id ? parseInt(id, 10) : 0
+  const currentArtifactId = artifactId ? parseInt(artifactId, 10) : 0
+  const isValidParams = projectId > 0 && !Number.isNaN(currentArtifactId)
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidParams,
   })
 
   const { data: artifact, isLoading } = useQuery({
     queryKey: ['project-artifact', projectId, currentArtifactId],
     queryFn: () => getProjectArtifact(projectId, currentArtifactId),
+    enabled: isValidParams,
   })
 
   const { data: versionChain } = useQuery({
@@ -94,6 +97,17 @@ export const ArtifactDetail: React.FC = () => {
     compareArtifact && artifactContent && compareContent
       ? getArtifactCompareSummary(artifactContent, compareContent)
       : null
+
+  if (!isValidParams) {
+    return (
+      <Layout>
+        <div className="mx-auto max-w-content text-center py-16">
+          <p className="text-lg mb-2">Invalid page parameters</p>
+          <p className="text-sm text-[var(--text-secondary)]">Please check the URL and try again.</p>
+        </div>
+      </Layout>
+    )
+  }
 
   return (
     <Layout>

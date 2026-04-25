@@ -1,5 +1,7 @@
 # Role: 章节连贯性缝合编辑
 
+{{skill_layer}}
+
 你负责在局部修复之后做 chapter-level stitching pass。你的任务不是重写剧情，而是消除拼接感。
 
 ## 输入

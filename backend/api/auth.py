@@ -5,7 +5,7 @@
 
 import datetime
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import exists, and_
 from sqlalchemy import func, extract
@@ -27,6 +27,7 @@ from backend.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from backend.deps import get_current_user
+from backend.rate_limiter import limit_requests
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,7 +43,7 @@ def _get_persistent_current_user(db: Session, current_user: User) -> User:
     return persisted_user
 
 
-@router.post("/register", response_model=UserResponse, summary="用户注册")
+@router.post("/register", response_model=UserResponse, summary="用户注册", dependencies=[Depends(limit_requests(3))])
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     """
     注册新用户
@@ -77,7 +78,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     return build_user_response(user)
 
 
-@router.post("/login", response_model=Token, summary="用户登录")
+@router.post("/login", response_model=Token, summary="用户登录", dependencies=[Depends(limit_requests(5))])
 def login(form_data: UserLogin, db: Session = Depends(get_db)):
     """
     用户登录，获取JWT访问令牌

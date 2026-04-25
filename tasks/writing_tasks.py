@@ -46,8 +46,42 @@ class GenerateNovelTask(Task):
     """小说生成任务基类，自定义异常处理和状态更新"""
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
-        """任务失败时的回调"""
+        """任务失败时的回调：记录日志并清理临时资源"""
         logger.error(f"Task {task_id} failed: {exc}", exc_info=True)
+
+        # 清理不完整的临时文件和标记项目目录状态
+        try:
+            project_dir = args[0] if args else kwargs.get("project_dir")
+            if project_dir:
+                project_path = Path(project_dir)
+
+                # 1. 清理临时文件
+                temp_files = [
+                    project_path / "user_requirements.yaml",
+                    project_path / "temp_plan.json",
+                    project_path / ".writing.lock",
+                ]
+                for temp_file in temp_files:
+                    if temp_file.exists():
+                        try:
+                            temp_file.unlink()
+                            logger.info(f"Cleaned up temporary file: {temp_file}")
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to cleanup {temp_file}: {cleanup_error}")
+
+                # 2. 标记项目目录状态为失败
+                status_file = project_path / ".task_failed.txt"
+                try:
+                    with open(status_file, "w", encoding="utf-8") as f:
+                        f.write(f"Task failed at: {datetime.utcnow().isoformat()}\n")
+                        f.write(f"Error: {str(exc)}\n")
+                        f.write(f"Task ID: {task_id}\n")
+                    logger.info(f"Marked project directory status: failed")
+                except Exception as status_error:
+                    logger.warning(f"Failed to write status file: {status_error}")
+        except Exception as cleanup_exception:
+            logger.warning(f"Error during failure cleanup for task {task_id}: {cleanup_exception}")
+
         super().on_failure(exc, task_id, args, kwargs, einfo)
 
 
@@ -124,7 +158,11 @@ def generate_novel_task(
                 "cancelled": True,
                 "message": "Task has been cancelled",
             }
-    except Exception:
+    except Exception as e:
+        logger.error(
+            f"Failed to query task record for task {self.request.id}: {str(e)}",
+            exc_info=True,
+        )
         task_record = None
 
     def ensure_not_cancelled(message: str = "Task has been cancelled") -> None:
@@ -438,12 +476,15 @@ def generate_novel_task(
                 result = orchestrator.run_full_novel()
             finally:
                 if materialized_feedback_files:
-                    applied_feedback_item_ids = reconcile_consumed_feedback_files(db, materialized_feedback_files)
-                    if applied_feedback_item_ids:
-                        logger.info(
-                            "Marked %s feedback item(s) as applied after orchestration consumed their bridge files",
-                            len(applied_feedback_item_ids),
-                        )
+                    try:
+                        applied_feedback_item_ids = reconcile_consumed_feedback_files(db, materialized_feedback_files)
+                        if applied_feedback_item_ids:
+                            logger.info(
+                                "Marked %s feedback item(s) as applied after orchestration consumed their bridge files",
+                                len(applied_feedback_item_ids),
+                            )
+                    except Exception as feedback_error:
+                        logger.warning("Failed to reconcile feedback files: %s", feedback_error)
 
             # 更新任务状态为success
             if task_record is not None:
@@ -473,8 +514,10 @@ def generate_novel_task(
                             if not chapters_dir.exists():
                                 chapters_dir = project_dir  # 兼容旧版
                             for chapter_file in sorted(chapters_dir.glob("chapter_*.txt")):
-                                match = chapter_file.name.split("_")[1].split(".")[0]
-                                chapter_index = int(match)
+                                file_match = re.search(r"chapter_(\d+)\.txt", chapter_file.name)
+                                if not file_match:
+                                    continue
+                                chapter_index = int(file_match.group(1))
                                 synced_chapter = sync_chapter_file_to_db(
                                     db=db,
                                     project=project,
@@ -607,8 +650,9 @@ def generate_novel_task(
                     metadata_updates={"error_message": str(e)},
                 )
                 db.commit()
-            except Exception:
-                pass
+            except Exception as db_error:
+                logger.error("Failed to commit failure status to DB: %s", db_error)
+                db.rollback()
 
         # 重试，最多3次
         if self.request.retries < self.max_retries:

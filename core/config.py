@@ -99,7 +99,7 @@ class Settings(BaseSettings):
 
     # ========== JWT 认证配置 ==========
     jwt_secret_key: str = Field(
-        "your-secret-key-change-in-production-keep-it-safe",
+        "",
         description="JWT签名密钥，从环境变量读取"
     )
     user_api_key_encryption_key: str = Field(

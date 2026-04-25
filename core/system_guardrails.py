@@ -173,7 +173,8 @@ def check_word_count(content: str, target_count: int, tolerance: float = 0.30) -
     text = content.replace('\n', '').replace('\r', '').replace(' ', '')
     actual = len(text)
 
-    deviation = (actual - target_count) / target_count
+    safe_target = max(1, target_count)
+    deviation = (actual - safe_target) / safe_target
 
     if abs(deviation) <= tolerance:
         return True, actual, deviation, ""

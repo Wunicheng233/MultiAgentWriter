@@ -84,7 +84,7 @@ export const QualityWidget: React.FC<QualityWidgetProps> = ({
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-border">
                     <div
-                      className="h-full rounded-full transition-all duration-500"
+                      className="h-full rounded-full transition-all duration-200"
                       style={{
                         width: `${(dim.score / (dim.maxScore || 10)) * 100}%`,
                         backgroundColor:

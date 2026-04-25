@@ -5,31 +5,14 @@
 
 import os
 from celery_app import celery_app
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from celery.utils.log import get_task_logger
 from datetime import datetime
 
+from backend.database import SessionLocal
 from backend.models import GenerationTask
 from services.export_service import ExportService
 
-# 创建数据库连接，从环境变量读取（同 backend/database.py）
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except Exception:
-    pass
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/mutiagent_writer"
-)
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = get_task_logger(__name__)
 
 
 @celery_app.task(bind=True, name="export_project", ignore_result=False)
@@ -97,7 +80,7 @@ def export_project_task(self, project_id: int, format: str) -> dict:
         return result
 
     except Exception as e:
-        # 更新数据库状态为失败
+        # 更新数据库状态为失败（先确保数据库状态持久化）
         task_record = db.query(GenerationTask).filter(
             GenerationTask.celery_task_id == self.request.id
         ).first()
@@ -105,8 +88,13 @@ def export_project_task(self, project_id: int, format: str) -> dict:
             task_record.status = "failure"
             task_record.error_message = str(e)
             task_record.completed_at = datetime.utcnow()
-            db.commit()
+            try:
+                db.commit()
+            except Exception as commit_error:
+                logger.error(f"Failed to commit failure status to DB: {commit_error}")
+                db.rollback()
 
+        # 数据库状态已保存后再更新 Celery 状态并抛出异常
         self.update_state(state='FAILURE', meta={
             'error': str(e)
         })

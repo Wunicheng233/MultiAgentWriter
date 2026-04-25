@@ -160,14 +160,16 @@ function getEventBadgeVariant(event: WorkflowEvent): BadgeVariant {
 
 export const WorkflowRunDetail: React.FC = () => {
   const { id, runId } = useParams<{ id: string; runId: string }>()
-  const projectId = parseInt(id!, 10)
-  const workflowRunId = parseInt(runId!, 10)
+  const projectId = id ? parseInt(id, 10) : 0
+  const workflowRunId = runId ? parseInt(runId, 10) : 0
+  const isValidParams = projectId > 0 && !Number.isNaN(workflowRunId)
   const queryClient = useQueryClient()
   const { showToast } = useToast()
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidParams,
   })
 
   const { data: run, isLoading } = useQuery({
@@ -176,6 +178,7 @@ export const WorkflowRunDetail: React.FC = () => {
       include_steps: true,
       include_feedback_items: true,
     }),
+    enabled: isValidParams,
   })
 
   const { data: runArtifacts } = useQuery({
@@ -185,7 +188,7 @@ export const WorkflowRunDetail: React.FC = () => {
       include_content: true,
       limit: 20,
     }),
-    enabled: !!run,
+    enabled: isValidParams && !!run,
   })
 
   const restartProjectMutation = useMutation({
@@ -244,14 +247,25 @@ export const WorkflowRunDetail: React.FC = () => {
   const eventLog = getWorkflowEvents(run)
   const metadataEntries = Object.entries(run.run_metadata || {}).filter(([key]) => key !== 'event_log')
   const stepCount = run.steps?.length ?? 0
-  const feedbackCount = run.feedback_items?.length ?? 0
+  const feedbackCount = run?.feedback_items?.length ?? 0
   const artifactCount = runArtifacts?.items.length ?? 0
   const workflowV2Artifacts = (runArtifacts?.items || []).filter(artifact => workflowV2ArtifactTypes.has(artifact.artifact_type))
-  const hasRelatedChapter = typeof run.current_chapter === 'number' && run.current_chapter > 0
-  const isActiveRun = run.status === 'running' || run.status === 'waiting_confirm'
-  const isFailedRun = run.status === 'failed' || run.status === 'cancelled'
+  const hasRelatedChapter = typeof run?.current_chapter === 'number' && run.current_chapter > 0
+  const isActiveRun = run?.status === 'running' || run?.status === 'waiting_confirm'
+  const isFailedRun = run?.status === 'failed' || run?.status === 'cancelled'
   const currentActiveRunId = project?.current_generation_task?.current_workflow_run?.id
   const hasOtherActiveRun = !!currentActiveRunId && currentActiveRunId !== run.id
+
+  if (!isValidParams) {
+    return (
+      <Layout>
+        <div className="mx-auto max-w-content text-center py-16">
+          <p className="text-lg mb-2">Invalid page parameters</p>
+          <p className="text-sm text-[var(--text-secondary)]">Please check the URL and try again.</p>
+        </div>
+      </Layout>
+    )
+  }
 
   return (
     <Layout>

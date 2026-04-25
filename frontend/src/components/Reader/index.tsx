@@ -22,9 +22,13 @@ import type { PaginationResponse } from './types';
 
 const Reader: React.FC = () => {
   const { id, chapterIndex } = useParams<{ id: string; chapterIndex: string }>();
-  const projectId = parseInt(id!);
-  const currentChapterIndex = parseInt(chapterIndex!);
+  const projectId = id ? parseInt(id) : 0;
+  const currentChapterIndex = chapterIndex ? parseInt(chapterIndex) : 0;
   const queryClient = useQueryClient();
+
+  // 参数校验 - 无效参数时在 hooks 外部检查，避免条件调用
+  const isValidProjectId = !Number.isNaN(projectId) && projectId > 0;
+  const isValidChapterIndex = !Number.isNaN(currentChapterIndex);
   const { showToast } = useToast();
 
   // Store state
@@ -33,20 +37,23 @@ const Reader: React.FC = () => {
   const setCurrentChapter = useReaderStore(state => state.setCurrentChapter);
   const { applySettings } = useReaderSettings();
 
-  // Fetch data
+  // Fetch data - 仅在参数有效时查询
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidProjectId,
   });
 
   const { data: chapters = [] } = useQuery({
     queryKey: ['project-chapters', projectId],
     queryFn: () => listChapters(projectId),
+    enabled: isValidProjectId,
   });
 
   const { data: chapter, isLoading } = useQuery({
     queryKey: ['chapter', projectId, currentChapterIndex],
     queryFn: () => getChapter(projectId, currentChapterIndex),
+    enabled: isValidProjectId && isValidChapterIndex,
   });
 
   // Content sync between modes
@@ -134,6 +141,20 @@ const Reader: React.FC = () => {
     return (
       <Layout>
         <p className="text-secondary">章节不存在</p>
+      </Layout>
+    );
+  }
+
+  // 无效参数显示错误
+  if (!isValidProjectId || !isValidChapterIndex) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">参数错误</h2>
+            <p className="text-gray-500">项目ID或章节索引无效，请检查URL</p>
+          </div>
+        </div>
       </Layout>
     );
   }

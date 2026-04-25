@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from utils.file_utils import write_file_atomic
+
 
 DEFAULT_NOVEL_STATE: dict[str, Any] = {
     "schema_version": "novel_state_v1",
@@ -55,9 +57,8 @@ class NovelStateService:
         saved["schema_version"] = "novel_state_v1"
         saved["updated_at"] = datetime.utcnow().isoformat()
         if self.state_path:
-            self.state_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.state_path, "w", encoding="utf-8") as f:
-                json.dump(saved, f, ensure_ascii=False, indent=2)
+            content = json.dumps(saved, ensure_ascii=False, indent=2)
+            write_file_atomic(self.state_path, content)
         return saved
 
     def build_prewrite_context(

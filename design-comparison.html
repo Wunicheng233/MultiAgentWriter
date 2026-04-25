@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StoryForge IDE 风格设计方向对比</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #faf7f2;
+      color: #3a2c1f;
+      line-height: 1.6;
+    }
+    .serif {
+      font-family: 'Crimson Pro', Georgia, serif;
+    }
+    .hero {
+      padding: 80px 48px 48px;
+      text-align: center;
+      border-bottom: 1px solid rgba(91, 127, 110, 0.15);
+    }
+    .hero h1 {
+      font-size: 42px;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 18px;
+      color: #7a6f62;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      padding: 48px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(60, 40, 20, 0.06);
+      overflow: hidden;
+      border: 1px solid rgba(91, 127, 110, 0.1);
+    }
+    .panel-header {
+      padding: 24px;
+      border-bottom: 1px solid rgba(91, 127, 110, 0.1);
+    }
+    .panel-header h2 {
+      font-size: 20px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .panel-header p {
+      font-size: 14px;
+      color: #7a6f62;
+      line-height: 1.5;
+    }
+    .wireframe-container {
+      padding: 20px;
+      background: #f5f3ef;
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .wireframe {
+      width: 100%;
+      height: 280px;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    .characteristics {
+      padding: 24px;
+    }
+    .characteristics h3 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #5b7f6e;
+      margin-bottom: 16px;
+    }
+    .characteristics ul {
+      list-style: none;
+      margin-bottom: 24px;
+    }
+    .characteristics li {
+      font-size: 14px;
+      padding: 6px 0;
+      padding-left: 20px;
+      position: relative;
+      color: #4a3f35;
+    }
+    .characteristics li:before {
+      content: '•';
+      position: absolute;
+      left: 0;
+      color: #5b7f6e;
+    }
+    .pros-cons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .pros-cons h4 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+    .pros h4 { color: #5b7f6e; }
+    .cons h4 { color: #c06b4e; }
+    .pros-cons ul {
+      list-style: none;
+    }
+    .pros-cons li {
+      font-size: 13px;
+      padding: 4px 0;
+      padding-left: 16px;
+      color: #7a6f62;
+    }
+    .pros li:before { content: '✓'; color: #5b7f6e; }
+    .cons li:before { content: '✗'; color: #c06b4e; }
+    .recommendation {
+      background: linear-gradient(135deg, rgba(91, 127, 110, 0.08), rgba(163, 139, 90, 0.05));
+      border-top: 1px solid rgba(91, 127, 110, 0.15);
+      padding: 64px 48px;
+    }
+    .recommendation-inner {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .recommendation-badge {
+      display: inline-block;
+      background: #5b7f6e;
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 24px;
+    }
+    .recommendation h2 {
+      font-size: 32px;
+      font-weight: 400;
+      margin-bottom: 16px;
+    }
+    .recommendation p {
+      font-size: 17px;
+      color: #4a3f35;
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+    .recommendation .reasoning {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 32px;
+      border: 1px solid rgba(91, 127, 110, 0.15);
+    }
+    .recommendation .reasoning h3 {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      color: #3a2c1f;
+    }
+    .vs-code-wireframe {
+      background: #1e1e1e;
+      display: grid;
+      grid-template-columns: 48px 200px 1fr;
+      grid-template-rows: 32px 1fr 24px;
+      height: 100%;
+      font-size: 11px;
+      color: #ccc;
+    }
+    .vs-code-title {
+      grid-column: 1 / -1;
+      background: #323233;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+    }
+    .vs-code-activity {
+      background: #333333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 8px;
+      gap: 16px;
+    }
+    .vs-code-activity-icon {
+      width: 24px;
+      height: 24px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+    }
+    .vs-code-sidebar {
+      background: #252526;
+      padding: 12px;
+    }
+    .vs-code-file {
+      padding: 4px 8px;
+      margin: 2px 0;
+      border-radius: 3px;
+    }
+    .vs-code-file.active {
+      background: #37373d;
+    }
+    .vs-code-editor {
+      background: #1e1e1e;
+      padding: 16px;
+      font-family: monospace;
+      line-height: 1.8;
+    }
+    .vs-code-editor .line {
+      height: 14px;
+      margin-bottom: 2px;
+    }
+    .vs-code-status {
+      grid-column: 1 / -1;
+      background: #007acc;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: white;
+      font-size: 10px;
+    }
+    .zed-wireframe {
+      background: #ffffff;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      grid-template-rows: 40px 1fr;
+      height: 100%;
+      font-size: 11px;
+      color: #333;
+      border: 1px solid #e0e0e0;
+    }
+    .zed-title {
+      grid-column: 1 / -1;
+      background: #f8f8f8;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 500;
+    }
+    .zed-sidebar {
+      background: #fafafa;
+      border-right: 1px solid #e8e8e8;
+      padding: 16px;
+    }
+    .zed-item {
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 4px;
+    }
+    .zed-item.active {
+      background: #e8e8e8;
+    }
+    .zed-editor {
+      background: white;
+      padding: 40px;
+      font-family: 'Crimson Pro', Georgia, serif;
+      font-size: 16px;
+      line-height: 1.8;
+      color: #1a1a1a;
+    }
+    .zed-editor .line {
+      height: 20px;
+      margin-bottom: 4px;
+    }
+    .windsurf-wireframe {
+      background: #0f172a;
+      display: grid;
+      grid-template-columns: 60px 280px 1fr 200px;
+      grid-template-rows: 36px 1fr 28px;
+      height: 100%;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .windsurf-title {
+      grid-column: 1 / -1;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    .windsurf-nav {
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 12px;
+      gap: 16px;
+    }
+    .windsurf-nav-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 6px;
+      opacity: 0.6;
+    }
+    .windsurf-nav-icon.active {
+      opacity: 1;
+    }
+    .windsurf-files {
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      padding: 12px;
+    }
+    .windsurf-file {
+      padding: 6px 10px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+    }
+    .windsurf-file.active {
+      background: #334155;
+    }
+    .windsurf-canvas {
+      background: #0f172a;
+      padding: 24px;
+    }
+    .windsurf-canvas .line {
+      height: 14px;
+      margin-bottom: 4px;
+      background: linear-gradient(90deg, rgba(255,255,255,0.1), transparent);
+      border-radius: 2px;
+    }
+    .windsurf-ai-panel {
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      padding: 12px;
+    }
+    .windsurf-ai-header {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+    .windsurf-status {
+      grid-column: 1 / -1;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 10px;
+    }
+    @media (max-width: 1200px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+        max-width: 600px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function VSCodeWireframe() {
+      return (
+        <div className="vs-code-wireframe">
+          <div className="vs-code-title">
+            <span style={{opacity: 0.6}}>⚙</span>
+            <span>StoryForge — Visual Studio Code</span>
+          </div>
+          <div className="vs-code-activity">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="vs-code-activity-icon" style={{
+                opacity: i === 1 ? 1 : 0.4,
+                background: i === 1 ? '#007acc' : 'rgba(255,255,255,0.2)'
+              }} />
+            ))}
+          </div>
+          <div className="vs-code-sidebar">
+            <div style={{fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px', opacity: 0.5}}>Explorer</div>
+            <div className="vs-code-file active">📄 Chapter_01.md</div>
+            <div className="vs-code-file">📄 Chapter_02.md</div>
+            <div className="vs-code-file">📁 Outline/</div>
+            <div className="vs-code-file" style={{paddingLeft: '20px'}}>📄 plot.md</div>
+            <div className="vs-code-file" style={{paddingLeft: '20px'}}>📄 characters.md</div>
+          </div>
+          <div className="vs-code-editor">
+            {[1,2,3,4,5,6,7,8,9,10].map(i => (
+              <div key={i} className="line" style={{
+                background: i <= 2 ? 'rgba(255,255,255,0.3)' : i <= 5 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)',
+                width: `${30 + i * 7}%`
+              }} />
+            ))}
+          </div>
+          <div className="vs-code-status">
+            <span>Ln 12, Col 34</span>
+            <span style={{marginLeft: 'auto'}}>Spaces: 2</span>
+            <span style={{marginLeft: '16px'}}>UTF-8</span>
+          </div>
+        </div>
+      );
+    }
+
+    function ZedWireframe() {
+      return (
+        <div className="zed-wireframe">
+          <div className="zed-title">
+            <span style={{fontFamily: "'Crimson Pro', serif", fontSize: '14px'}}>StoryForge</span>
+            <span style={{marginLeft: '12px', opacity: 0.4}}>|</span>
+            <span style={{marginLeft: '12px', opacity: 0.6}}>Chapter_01.md</span>
+          </div>
+          <div className="zed-sidebar">
+            <div className="zed-item" style={{fontWeight: 500, color: '#5b7f6e'}}>📚 项目</div>
+            <div className="zed-item active">📝 编辑器</div>
+            <div className="zed-item">🤖 AI 助手</div>
+            <div className="zed-item">📊 质量分析</div>
+            <div className="zed-item">⚙️ 设置</div>
+            <div style={{marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #e0e0e0'}}>
+              <div style={{fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.4, marginBottom: '8px'}}>文件</div>
+              <div className="zed-item" style={{fontSize: '10px'}}>Chapter_01.md</div>
+              <div className="zed-item" style={{fontSize: '10px'}}>Chapter_02.md</div>
+            </div>
+          </div>
+          <div className="zed-editor">
+            {[1,2,3,4,5,6,7,8].map(i => (
+              <div key={i} className="line" style={{
+                background: i <= 2 ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.04)',
+                width: `${40 + i * 7}%`,
+                borderRadius: '2px'
+              }} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function WindsurfWireframe() {
+      return (
+        <div className="windsurf-wireframe">
+          <div className="windsurf-title">
+            <span style={{color: '#8b5cf6', fontWeight: 500}}>✦</span>
+            <span style={{marginLeft: '8px'}}>StoryForge Codex</span>
+          </div>
+          <div className="windsurf-nav">
+            {[1,2,3,4].map(i => (
+              <div key={i} className={`windsurf-nav-icon ${i === 1 ? 'active' : ''}`} />
+            ))}
+          </div>
+          <div className="windsurf-files">
+            <div className="windsurf-file" style={{color: '#e2e8f0'}}>📄 Chapter_01.md</div>
+            <div className="windsurf-file active">📄 Chapter_02.md</div>
+            <div className="windsurf-file">📄 outline.json</div>
+            <div className="windsurf-file">📄 characters.md</div>
+          </div>
+          <div className="windsurf-canvas">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="line" style={{width: `${50 + i * 6}%`}} />
+            ))}
+          </div>
+          <div className="windsurf-ai-panel">
+            <div className="windsurf-ai-header">AI 智能助手</div>
+            <div style={{marginBottom: '12px', fontSize: '10px', opacity: 0.7}}>上下文感知建议</div>
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              borderRadius: '6px',
+              padding: '10px',
+              marginBottom: '8px'
+            }}>
+              <div style={{color: '#818cf8', fontSize: '10px', marginBottom: '4px'}}>💡 建议</div>
+              <div style={{fontSize: '10px', lineHeight: 1.5}}>主角情绪在这里可以更深入...</div>
+            </div>
+            <div style={{
+              background: 'rgba(139, 92, 246, 0.1)',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+              borderRadius: '6px',
+              padding: '10px'
+            }}>
+              <div style={{color: '#a78bfa', fontSize: '10px', marginBottom: '4px'}}>🔗 关联</div>
+              <div style={{fontSize: '10px', lineHeight: 1.5}}>参考第3章伏笔...</div>
+            </div>
+          </div>
+          <div className="windsurf-status">
+            <span style={{color: '#4ade80'}}>●</span>
+            <span style={{marginLeft: '6px'}}>AI 在线</span>
+            <span style={{marginLeft: 'auto'}}>Tokens: 12,450</span>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <div>
+          <section className="hero serif">
+            <h1>StoryForge IDE 风格设计方向对比</h1>
+            <p>三种主流 AI 编辑工具的布局哲学，适配小说创作场景</p>
+          </section>
+
+          <div className="comparison-grid">
+            {/* VS Code Style */}
+            <div className="panel">
+              <div className="panel-header">
+                <h2>Cursor / VS Code 风格</h2>
+                <p>现代深色 IDE — 开发者熟悉的工作环境</p>
+              </div>
+              <div className="wireframe-container">
+                <div className="wireframe">
+                  <VSCodeWireframe />
+                </div>
+              </div>
+              <div className="characteristics">
+                <h3>核心特征</h3>
+                <ul>
+                  <li>深色主题，降低眼部疲劳</li>
+                  <li>左侧活动栏 + 文件浏览器</li>
+                  <li>标签页多文档系统</li>
+                  <li>分栏编辑器布局</li>
+                  <li>命令面板快速操作</li>
+                  <li>底部状态栏显示状态</li>
+                  <li>语法高亮 + minimap</li>
+                </ul>
+                <div className="pros-cons">
+                  <div className="pros">
+                    <h4>优点</h4>
+                    <ul>
+                      <li>开发者用户群体熟悉</li>
+                      <li>功能完整，扩展性强</li>
+                      <li>键盘操作效率高</li>
+                      <li>多文件管理能力强</li>
+                    </ul>
+                  </div>
+                  <div className="cons">
+                    <h4>缺点</h4>
+                    <ul>
+                      <li>学习曲线较陡</li>
+                      <li>视觉偏技术，缺少文学温度</li>
+                      <li>信息密度高，易分心</li>
+                      <li>与 parchment 主题冲突</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Claude Code / Zed Style */}
+            <div className="panel" style={{borderColor: '#5b7f6e', boxShadow: '0 8px 32px rgba(91, 127, 110, 0.15)'}}>
+              <div className="panel-header" style={{background: 'linear-gradient(135deg, rgba(91, 127, 110, 0.08), transparent)'}}>
+                <h2 style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <span style={{
+                    background: '#5b7f6e',
+                    color: 'white',
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    fontWeight: 500
+                  }}>推荐</span>
+                  Claude Code / Zed 风格
+                </h2>
+                <p>极简沉浸 — 内容优先，专注创作</p>
+              </div>
+              <div className="wireframe-container" style={{background: 'linear-gradient(135deg, white, #faf7f2)'}}>
+                <div className="wireframe">
+                  <ZedWireframe />
+                </div>
+              </div>
+              <div className="characteristics">
+                <h3>核心特征</h3>
+                <ul>
+                  <li>极简沉浸，减少视觉噪音</li>
+                  <li>左右分栏：导航 + 画布</li>
+                  <li>对话式 AI 交互界面</li>
+                  <li>可折叠侧边栏（专注模式）</li>
+                  <li>命令中心快速访问</li>
+                  <li>浅色/深色主题切换</li>
+                  <li>优雅的排版和留白</li>
+                </ul>
+                <div className="pros-cons">
+                  <div className="pros">
+                    <h4>优点</h4>
+                    <ul>
+                      <li>专注创作，减少分心</li>
+                      <li>视觉干净现代</li>
+                      <li>与 parchment 主题契合</li>
+                      <li>文学创作的沉浸感强</li>
+                      <li>排版优雅，阅读舒适</li>
+                    </ul>
+                  </div>
+                  <div className="cons">
+                    <h4>缺点</h4>
+                    <ul>
+                      <li>多文件管理能力一般</li>
+                      <li>高级功能需要学习</li>
+                      <li>信息量过大时显拥挤</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Windsurf / Codex Style */}
+            <div className="panel">
+              <div className="panel-header">
+                <h2>Windsurf / Codex 风格</h2>
+                <p>AI 原生 — 上下文感知的智能画布</p>
+              </div>
+              <div className="wireframe-container">
+                <div className="wireframe">
+                  <WindsurfWireframe />
+                </div>
+              </div>
+              <div className="characteristics">
+                <h3>核心特征</h3>
+                <ul>
+                  <li>AI 原生设计理念</li>
+                  <li>多面板上下文感知</li>
+                  <li>智能侧边栏实时建议</li>
+                  <li>多模态画布系统</li>
+                  <li>流式输出动画效果</li>
+                  <li>时间线 + 版本历史</li>
+                  <li>深度集成 AI 功能</li>
+                </ul>
+                <div className="pros-cons">
+                  <div className="pros">
+                    <h4>优点</h4>
+                    <ul>
+                      <li>AI 功能展示效果好</li>
+                      <li>未来感强，科技感足</li>
+                      <li>上下文感知能力强</li>
+                      <li>多维度信息展示</li>
+                    </ul>
+                  </div>
+                  <div className="cons">
+                    <h4>缺点</h4>
+                    <ul>
+                      <li>界面过于复杂</li>
+                      <li>学习曲线陡峭</li>
+                      <li>与文学气质不符</li>
+                      <li>容易让用户分心</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section className="recommendation">
+            <div className="recommendation-inner serif">
+              <div className="recommendation-badge">最终推荐</div>
+              <h2>选择方案二：Claude Code / Zed 风格</h2>
+              <p>
+                在综合考虑 StoryForge 的产品定位（AI 辅助小说创作）、目标用户（作家、编剧、内容创作者）
+                和现有设计系统（Warm Parchment + Sage Green）之后，我们推荐采用**Claude Code / Zed 风格**
+                作为主要设计方向。
+              </p>
+
+              <div className="reasoning">
+                <h3>核心理由</h3>
+                <ul style={{listStyle: 'none', marginTop: '12px'}}>
+                  <li style={{padding: '8px 0', paddingLeft: '24px', position: 'relative'}}>
+                    <strong style={{color: '#5b7f6e'}}>沉浸感优先</strong> — 写作是一项需要深度专注的工作，极简设计能最大程度减少视觉干扰
+                  </li>
+                  <li style={{padding: '8px 0', paddingLeft: '24px', position: 'relative'}}>
+                    <strong style={{color: '#5b7f6e'}}>与现有设计系统完美契合</strong> — Warm Parchment 暖羊皮纸底色与极简风格相得益彰
+                  </li>
+                  <li style={{padding: '8px 0', paddingLeft: '24px', position: 'relative'}}>
+                    <strong style={{color: '#5b7f6e'}}>平衡 IDE 功能与文学气质</strong> — 既有现代编辑器的高效，又不失写作工具的温润感
+                  </li>
+                  <li style={{padding: '8px 0', paddingLeft: '24px', position: 'relative'}}>
+                    <strong style={{color: '#5b7f6e'}}>可折叠侧边栏</strong> — 需要时显示 AI 面板，专注时完全隐藏，提供纯净的画布
+                  </li>
+                  <li style={{padding: '8px 0', paddingLeft: '24px', position: 'relative'}}>
+                    <strong style={{color: '#5b7f6e'}}>用户认知成本低</strong> — 左右分栏是最经典的编辑器布局，用户无需重新学习
+                  </li>
+                </ul>
+              </div>
+
+              <div style={{marginTop: '32px', fontSize: '15px', color: '#7a6f62'}}>
+                <p style={{fontStyle: 'italic'}}>
+                  "好的设计是看不见的。当作家专注于文字时，他们不应该注意到界面的存在。
+                  Claude Code / Zed 的极简哲学完美体现了这一点——工具隐入背景，只有故事在舞台中央。"
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

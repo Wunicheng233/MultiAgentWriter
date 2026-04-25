@@ -36,8 +36,12 @@
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   --accent-primary: #4f76f3;
+  --accent-warm: #e11d48;
+  --accent-soft: #f43f5e;
+  --accent-gold: #f59e0b;
   --border-default: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.1);
+  --border-subtle: #e5e7eb;
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.04);
   --shadow-default: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -53,8 +57,12 @@
   --text-secondary: #768390;
   --text-muted: #545d68;
   --accent-primary: #6494ed;
+  --accent-warm: #f85149;
+  --accent-soft: #ff7b72;
+  --accent-gold: #d29922;
   --border-default: rgba(100, 148, 237, 0.12);
   --border-strong: rgba(100, 148, 237, 0.2);
+  --border-subtle: #444c56;
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-default: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -79,11 +87,59 @@
   .font-serif {
     font-family: 'Crimson Pro', Georgia, serif;
   }
+
+  /* Focus styles for accessibility */
+  *:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+
+  /* Remove default focus styles for mouse users */
+  *:focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 /* Custom Utilities */
 @layer utilities {
-  .content-auto {
+  /* Long content optimization */
+  .content-visibility-auto {
     content-visibility: auto;
+    contain-intrinsic-size: 1000px;
   }
+}
+
+/* Focus Mode Styles */
+.focus-mode-active .non-essential-ui {
+  opacity: 0.1;
+  transition: opacity 200ms ease-out;
+}
+
+.focus-mode-active .non-essential-ui:hover {
+  opacity: 1;
+}
+
+/* Typography for editor content */
+.editor-content {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.7;
+  font-size: 17px;
+  color: var(--text-body);
+}
+
+.editor-content h1,
+.editor-content h2,
+.editor-content h3 {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+}
+
+.editor-content p {
+  margin-bottom: 1.5em;
+}
+
+.editor-content:focus {
+  outline: none;
 }

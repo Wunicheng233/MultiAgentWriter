@@ -33,17 +33,28 @@ function getScoreColor(score: number): BadgeVariant {
 
 export const QualityDashboard: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const projectId = parseInt(id!, 10)
+  const projectId = id ? parseInt(id, 10) : 0
+  const isValidProjectId = !Number.isNaN(projectId) && projectId > 0
 
   const { data: analytics, isLoading } = useQuery({
     queryKey: ['project-analytics', projectId],
     queryFn: () => getProjectAnalytics(projectId),
+    enabled: isValidProjectId,
   })
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidProjectId,
   })
+
+  if (!isValidProjectId) {
+    return (
+      <Layout>
+        <p className="text-secondary">项目ID无效</p>
+      </Layout>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -75,10 +86,15 @@ export const QualityDashboard: React.FC = () => {
   const totalChapters = analytics.total_chapters || 0
   const passedChapters = analytics.passed_chapters || 0
   const passRate = totalChapters > 0 ? (passedChapters / totalChapters) * 100 : 0
-  const strongestDimensionEntry = Object.entries(dimScores).sort((a, b) => b[1] - a[1])[0]
-  const weakestDimensionEntry = Object.entries(dimScores).sort((a, b) => a[1] - b[1])[0]
-  const highestChapter = [...chapterScores].sort((a, b) => b.quality_score - a.quality_score)[0]
-  const lowestChapter = [...chapterScores].sort((a, b) => a.quality_score - b.quality_score)[0]
+
+  // 安全的排序和索引访问，避免空数组越界
+  const sortedDimensions = Object.entries(dimScores).sort((a, b) => Number(b[1]) - Number(a[1]))
+  const strongestDimensionEntry = sortedDimensions.length > 0 ? sortedDimensions[0] : null
+  const weakestDimensionEntry = sortedDimensions.length > 0 ? sortedDimensions[sortedDimensions.length - 1] : null
+
+  const sortedChapters = [...chapterScores].sort((a, b) => Number(b.quality_score) - Number(a.quality_score))
+  const highestChapter = sortedChapters.length > 0 ? sortedChapters[0] : null
+  const lowestChapter = sortedChapters.length > 0 ? sortedChapters[sortedChapters.length - 1] : null
 
   const scoreBuckets = {
     strong: chapterScores.filter(item => item.quality_score >= 8).length,

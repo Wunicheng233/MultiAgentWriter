@@ -1,4 +1,3 @@
-import json
 import shutil
 import tempfile
 import unittest
@@ -23,8 +22,8 @@ class SkillRuntimeTestCase(unittest.TestCase):
     ) -> Path:
         skill_dir = self.temp_dir / skill_id
         skill_dir.mkdir(parents=True)
-        metadata = {
-            "id": skill_id,
+        import yaml
+        frontmatter = {
             "name": skill_id.replace("-", " ").title(),
             "description": "测试 Skill",
             "version": "1.0",
@@ -43,11 +42,8 @@ class SkillRuntimeTestCase(unittest.TestCase):
             "safety_tags": safety_tags or ["safe_for_all"],
             "dependencies": [],
         }
-        (skill_dir / "skill.json").write_text(
-            json.dumps(metadata, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        (skill_dir / "injection.md").write_text(injection, encoding="utf-8")
+        skill_md_content = "---\n" + yaml.dump(frontmatter, allow_unicode=True) + "---\n\n" + injection
+        (skill_dir / "SKILL.md").write_text(skill_md_content, encoding="utf-8")
         return skill_dir
 
 
@@ -65,13 +61,11 @@ class SkillRegistryTests(SkillRuntimeTestCase):
         self.assertEqual(registry.load_skill("skill-a").priority, 50)
         self.assertIsNone(registry.load_skill("missing"))
 
-    def test_missing_required_fields_raises_error(self):
+    def test_missing_skill_md_raises_error(self):
         from core.skill_runtime.skill_registry import SkillRegistry, SkillValidationError
 
         skill_dir = self.temp_dir / "broken"
         skill_dir.mkdir()
-        (skill_dir / "skill.json").write_text('{"id": "broken"}', encoding="utf-8")
-        (skill_dir / "injection.md").write_text("broken", encoding="utf-8")
 
         with self.assertRaises(SkillValidationError):
             SkillRegistry(self.temp_dir).load_skill("broken")
@@ -104,7 +98,7 @@ class SkillAssemblerTests(SkillRuntimeTestCase):
         self.assertEqual([item.skill.id for item in assembled], ["planner-default", "writer-only"])
         self.assertTrue(all(item.rendered_content for item in assembled))
 
-    def test_critic_never_receives_skills(self):
+    def test_critic_can_receive_skills_when_explicitly_enabled(self):
         from core.skill_runtime.skill_assembler import SkillAssembler
         from core.skill_runtime.skill_registry import SkillRegistry
 
@@ -122,7 +116,8 @@ class SkillAssemblerTests(SkillRuntimeTestCase):
             project_config=project_config,
         )
 
-        self.assertEqual(assembled, [])
+        self.assertEqual(len(assembled), 1)
+        self.assertEqual(assembled[0].skill.id, "critic-requested")
 
     def test_zero_strength_disables_skill(self):
         from core.skill_runtime.skill_assembler import SkillAssembler
@@ -148,8 +143,8 @@ class SkillInjectorTests(SkillRuntimeTestCase):
 
         result = SkillInjector().inject("base\n{{skill_layer}}", assembled)
 
-        self.assertIn("Skill Layer Start", result)
-        self.assertIn("Skill: skill-a", result)
+        self.assertIn("Skills Enabled", result)
+        self.assertIn("### skill-a", result)
         self.assertIn("内容A", result)
         self.assertNotIn("{{skill_layer}}", result)
 
@@ -187,8 +182,8 @@ class SkillPromptIntegrationTests(unittest.TestCase):
 
         result = load_prompt("writer", project_config=project_config)
 
-        self.assertIn("Skill Layer Start", result)
-        self.assertIn("Skill: liu-cixin-perspective", result)
+        self.assertIn("Skills Enabled", result)
+        self.assertIn("### liu-cixin-perspective", result)
         self.assertIn("刘慈欣", result)
 
     def test_legacy_perspective_maps_to_skill_runtime_but_not_critic(self):
@@ -197,8 +192,8 @@ class SkillPromptIntegrationTests(unittest.TestCase):
         writer_prompt = load_prompt("writer", perspective="liu-cixin", perspective_strength=0.8)
         critic_prompt = load_prompt("critic", perspective="liu-cixin", perspective_strength=0.8)
 
-        self.assertIn("Skill: liu-cixin-perspective", writer_prompt)
-        self.assertNotIn("Skill: liu-cixin-perspective", critic_prompt)
+        self.assertIn("### liu-cixin-perspective", writer_prompt)
+        self.assertNotIn("### liu-cixin-perspective", critic_prompt)
         self.assertNotIn("评审视角：刘慈欣", critic_prompt)
 
 

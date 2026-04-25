@@ -11,7 +11,7 @@ from celery.result import AsyncResult
 from pydantic import BaseModel
 
 from backend.database import get_db
-from backend.models import User, GenerationTask, Project, Chapter
+from backend.models import User, GenerationTask, Project, ProjectCollaborator, Chapter
 from backend.schemas import GenerationTaskResponse
 from backend.task_dispatch import dispatch_tracked_task, make_task_id
 from backend.deps import get_current_user
@@ -21,6 +21,33 @@ from backend.workflow_service import (
     serialize_workflow_run,
     update_workflow_run_status,
 )
+
+
+def check_project_access(
+    project_id: int,
+    current_user: User,
+    db: Session,
+    require_owner: bool = False
+) -> Project:
+    """检查当前用户是否有权限访问项目（与 projects.py 保持一致）"""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return None
+
+    if project.user_id == current_user.id:
+        return project
+
+    if require_owner:
+        return None
+
+    collab = db.query(ProjectCollaborator).filter(
+        ProjectCollaborator.project_id == project_id,
+        ProjectCollaborator.user_id == current_user.id
+    ).first()
+
+    if collab:
+        return project
+    return None
 from celery_app import celery_app
 from tasks.writing_tasks import generate_novel_task
 
@@ -58,9 +85,9 @@ def confirm_chapter(
     # 刷新从数据库拿到最新状态
     db.refresh(task_record)
 
-    # 验证权限
-    project = db.query(Project).filter(Project.id == task_record.project_id).first()
-    if not project or project.user_id != current_user.id:
+    # 验证权限：确认操作需要所有者权限
+    project = check_project_access(task_record.project_id, current_user, db, require_owner=True)
+    if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="任务不存在"
@@ -189,9 +216,9 @@ def get_task_status(
             detail="任务不存在"
         )
 
-    # 验证权限：检查项目属于当前用户
-    project = db.query(Project).filter(Project.id == task_record.project_id).first()
-    if not project or project.user_id != current_user.id:
+    # 验证权限：状态查询允许协作者访问
+    project = check_project_access(task_record.project_id, current_user, db, require_owner=False)
+    if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="任务不存在"

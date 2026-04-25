@@ -102,16 +102,19 @@ function getRunSummary(run: WorkflowRun): string {
 
 export const ChapterList: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const projectId = parseInt(id!, 10)
+  const projectId = id ? parseInt(id, 10) : 0
+  const isValidProjectId = !Number.isNaN(projectId) && projectId > 0
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidProjectId,
   })
 
   const { data: chapters, isLoading } = useQuery({
     queryKey: ['chapters', projectId],
     queryFn: () => listChapters(projectId),
+    enabled: isValidProjectId,
   })
 
   const { data: workflowHistory } = useQuery({
@@ -121,7 +124,7 @@ export const ChapterList: React.FC = () => {
       include_steps: true,
       include_feedback_items: true,
     }),
-    enabled: !!project,
+    enabled: isValidProjectId && !!project,
   })
 
   const targetStart = project?.config?.start_chapter ?? 1

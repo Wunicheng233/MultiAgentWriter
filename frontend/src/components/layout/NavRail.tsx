@@ -1,32 +1,36 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 interface NavItemProps {
   icon: React.ReactNode
   label: string
-  path: string
   active: boolean
   onClick: () => void
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, path, active, onClick }) => {
+const NavItem: React.FC<NavItemProps> = React.memo(({ icon, label, active, onClick }) => {
   return (
     <button
       onClick={onClick}
       className={`
         w-11 h-11 flex items-center justify-center rounded-lg transition-all duration-150
+        focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50
         ${active
           ? 'bg-[var(--accent-primary)] bg-opacity-10 text-[var(--accent-primary)]'
           : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
         }
       `}
       title={label}
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
       data-testid="nav-item"
     >
       {icon}
     </button>
   )
-}
+})
+
+NavItem.displayName = 'NavItem'
 
 interface NavRailProps {
   collapsed: boolean
@@ -89,63 +93,92 @@ const CollapseIcon = () => (
   </svg>
 )
 
-export const NavRail: React.FC<NavRailProps> = ({ collapsed, onToggleCollapse }) => {
+export const NavRail: React.FC<NavRailProps> = React.memo(({ collapsed, onToggleCollapse }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const [hovered, setHovered] = useState(false)
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { path: '/projects', icon: <ProjectIcon />, label: 'Project Overview' },
     { path: '/write', icon: <EditorIcon />, label: 'Editor' },
     { path: '/chapters', icon: <ChaptersIcon />, label: 'Chapters' },
     { path: '/characters', icon: <CharactersIcon />, label: 'Characters' },
     { path: '/analytics', icon: <AnalyticsIcon />, label: 'Analytics' },
     { path: '/settings', icon: <SettingsIcon />, label: 'Settings' },
-  ]
+  ], [])
 
-  const isActive = (path: string) => {
+  const isActive = useCallback((path: string) => {
     return location.pathname.startsWith(path)
-  }
+  }, [location.pathname])
+
+  const handleNavigate = useCallback((path: string) => {
+    navigate(path)
+  }, [navigate])
+
+  const handleMouseEnter = useCallback(() => {
+    if (collapsed) setHovered(true)
+  }, [collapsed])
+
+  const handleMouseLeave = useCallback(() => {
+    setHovered(false)
+  }, [])
 
   // When collapsed and hovered, expand temporarily
   const effectiveCollapsed = collapsed && !hovered
 
   return (
-    <div
+    <nav
       className={`h-full flex flex-col items-center py-4 bg-[var(--bg-secondary)] transition-all duration-200 ease-out ${
         effectiveCollapsed ? 'justify-center' : 'justify-between'
       }`}
-      onMouseEnter={() => collapsed && setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      style={{ willChange: 'width' }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       data-testid="nav-rail"
+      aria-label="Main navigation"
     >
-      {!effectiveCollapsed && (
+      {effectiveCollapsed ? (
+        // When fully collapsed: show just the expand button
+        <button
+          onClick={onToggleCollapse}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50"
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+          data-testid="collapse-button"
+        >
+          <span style={{ transform: 'rotate(180deg)', display: 'inline-block' }}>
+              <CollapseIcon />
+            </span>
+        </button>
+      ) : (
         <>
-          <div className="flex flex-col gap-2 items-center">
+          <div className="flex flex-col gap-2 items-center" role="menubar">
             {navItems.map((item) => (
               <NavItem
                 key={item.path}
                 icon={item.icon}
                 label={item.label}
-                path={item.path}
                 active={isActive(item.path)}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNavigate(item.path)}
               />
             ))}
           </div>
 
           <button
             onClick={onToggleCollapse}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-all duration-150"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50"
             title="Collapse sidebar"
+            aria-label="Collapse sidebar"
             data-testid="collapse-button"
           >
             <CollapseIcon />
           </button>
         </>
       )}
-    </div>
+    </nav>
   )
-}
+})
+
+NavRail.displayName = 'NavRail'
 
 export default NavRail

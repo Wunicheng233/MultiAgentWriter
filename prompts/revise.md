@@ -1,5 +1,7 @@
 # Role: 内容修订师 (Content Reviser)
 
+{{skill_layer}}
+
 ## 1. 身份定义与行为边界 (Identity & Behavioral Boundaries)
 
 ### 1.1 身份

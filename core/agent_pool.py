@@ -11,6 +11,7 @@ StoryForge AI 精简架构 - 仅保留 4 个核心 Agent:
 """
 
 import openai
+import threading
 from typing import Dict, Any, Type
 from .agent_contract import AgentContract, get_agent_contract
 from .config import settings
@@ -137,44 +138,52 @@ class AgentPool:
     """Agent实例池，全局单例"""
 
     _instance: "AgentPool" = None
+    _lock: threading.Lock = threading.Lock()
     _instances: Dict[str, Any] = {}
 
     def __new__(cls):
+        # 双重检查锁定，保证线程安全的单例创建
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._instances = {}
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._instances = {}
+                    cls._instance._agent_map = {}
         return cls._instance
 
     def __init__(self):
         # Agent名称到类的映射，显式声明避免动态反射
-        self._agent_map: Dict[str, Type[BaseAgent]] = {
-            "planner": PlannerAgent,
-            "writer": WriterAgent,
-            "critic": CriticAgent,
-            "revise": ReviseAgent,
-        }
+        if not hasattr(self, "_agent_map") or not self._agent_map:
+            self._agent_map: Dict[str, Type[BaseAgent]] = {
+                "planner": PlannerAgent,
+                "writer": WriterAgent,
+                "critic": CriticAgent,
+                "revise": ReviseAgent,
+            }
 
     def get_agent(self, agent_name: str) -> BaseAgent:
         """
         获取Agent实例，如果池中不存在则惰性创建
-        线程安全：Python模块导入是线程安全的，此处仅读取+单例赋值
+        使用双重检查锁定保证线程安全
         """
         if agent_name not in self._instances:
-            logger.info(f"AgentPool: 惰性初始化 {agent_name} Agent")
-            agent_class = self._agent_map[agent_name]
-            api_key = settings.get_api_key_for_agent(agent_name)
-            model = settings.get_model_for_agent(agent_name)
-            temperature = settings.get_temperature_for_agent(agent_name)
+            with self._lock:
+                if agent_name not in self._instances:
+                    logger.info(f"AgentPool: 惰性初始化 {agent_name} Agent")
+                    agent_class = self._agent_map[agent_name]
+                    api_key = settings.get_api_key_for_agent(agent_name)
+                    model = settings.get_model_for_agent(agent_name)
+                    temperature = settings.get_temperature_for_agent(agent_name)
 
-            # 创建OpenAI客户端
-            client = openai.OpenAI(
-                api_key=api_key,
-                base_url=settings.base_url
-            )
+                    # 创建OpenAI客户端
+                    client = openai.OpenAI(
+                        api_key=api_key,
+                        base_url=settings.base_url
+                    )
 
-            # 创建Agent实例
-            agent = agent_class(client, model, temperature)
-            self._instances[agent_name] = agent
+                    # 创建Agent实例
+                    agent = agent_class(client, model, temperature)
+                    self._instances[agent_name] = agent
 
         return self._instances[agent_name]
 

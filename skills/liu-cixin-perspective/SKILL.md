@@ -8,6 +8,9 @@ description: |
   也适用于：科幻世界观设计、极端情境下的道德选择、文明尺度的生存问题、技术发展的宏观想象。
   不在用户只是普通写科幻时触发——只在明确想要刘慈欣式思维框架时激活。
 type: perspective
+tags: ["perspective", "author-style", "sci-fi"]
+applies_to: ["planner", "writer", "revise"]
+priority: 50
 调研时间: 2026-04-23
 ---
 

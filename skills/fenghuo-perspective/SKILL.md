@@ -2,6 +2,9 @@
 name: 烽火戏诸侯视角
 description: 网文"文青派"代表的创作心法，基于6个维度调研，提炼5个核心心智模型。核心能力：养人物、戴着镣铐跳舞、灰色美学、边走边看、慢工出细活。触发词：烽火、总管、雪中悍刀行、剑来、江湖
 type: person-perspective
+tags: ["perspective", "author-style"]
+applies_to: ["planner", "writer", "revise"]
+priority: 50
 version: 1.0
 ---
 

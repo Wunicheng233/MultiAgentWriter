@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from backend.database import get_db
 from backend.models import ShareLink, Project, Chapter
+from backend.rate_limiter import limit_requests
 
 from pydantic import BaseModel
 
@@ -23,7 +24,7 @@ class SharedProjectResponse(BaseModel):
 router = APIRouter(prefix="/share", tags=["share"])
 
 
-@router.get("/{token}", response_model=SharedProjectResponse, summary="获取分享项目信息")
+@router.get("/{token}", response_model=SharedProjectResponse, summary="获取分享项目信息", dependencies=[Depends(limit_requests(60))])
 def get_shared_project(
     token: str,
     db: Session = Depends(get_db)
@@ -77,7 +78,7 @@ def get_shared_project(
     }
 
 
-@router.get("/{token}/chapters/{chapter_index}", summary="获取分享章节内容")
+@router.get("/{token}/chapters/{chapter_index}", summary="获取分享章节内容", dependencies=[Depends(limit_requests(60))])
 def get_shared_chapter(
     token: str,
     chapter_index: int,

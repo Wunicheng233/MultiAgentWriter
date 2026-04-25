@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -54,15 +53,6 @@ class Skill:
 
 class SkillRegistry:
     DEFAULT_SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
-    REQUIRED_FIELDS = {
-        "id",
-        "name",
-        "description",
-        "version",
-        "author",
-        "applies_to",
-        "priority",
-    }
 
     def __init__(self, skills_dir: str | Path | None = None):
         self.skills_dir = Path(skills_dir) if skills_dir else self.DEFAULT_SKILLS_DIR
@@ -92,25 +82,12 @@ class SkillRegistry:
         if not skill_dir.exists() or not skill_dir.is_dir():
             return None
 
-        metadata_path = skill_dir / "skill.json"
-        injection_path = skill_dir / "injection.md"
         skill_md_path = skill_dir / "SKILL.md"
+        if not skill_md_path.exists():
+            raise SkillValidationError(f"Skill '{skill_id}' must include SKILL.md")
 
-        if metadata_path.exists() or injection_path.exists():
-            if not metadata_path.exists() or not injection_path.exists():
-                raise SkillValidationError(f"Skill '{skill_id}' must include skill.json and injection.md")
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            missing = self.REQUIRED_FIELDS - set(metadata)
-            if missing:
-                raise SkillValidationError(f"Skill '{skill_id}' missing required fields: {sorted(missing)}")
-            if metadata["id"] != skill_id:
-                raise SkillValidationError(f"Skill directory '{skill_id}' does not match metadata id '{metadata['id']}'")
-            frontmatter, body = self._parse_injection_file(injection_path.read_text(encoding="utf-8"))
-        elif skill_md_path.exists():
-            frontmatter, body = self._parse_injection_file(skill_md_path.read_text(encoding="utf-8"))
-            metadata = self._metadata_from_skill_md(skill_id, frontmatter)
-        else:
-            raise SkillValidationError(f"Skill '{skill_id}' must include either skill.json/injection.md or SKILL.md")
+        frontmatter, body = self._parse_injection_file(skill_md_path.read_text(encoding="utf-8"))
+        metadata = self._metadata_from_skill_md(skill_id, frontmatter)
 
         injection_by_agent = {
             key: str(value).strip()
@@ -120,13 +97,18 @@ class SkillRegistry:
         if frontmatter.get("target") == "all" and body:
             injection_by_agent.setdefault("all", body)
 
+        applies_to_value = metadata["applies_to"]
+        if not isinstance(applies_to_value, (list, tuple)):
+            applies_to_value = [applies_to_value]
+        applies_to = list(applies_to_value)
+
         skill = Skill(
             id=metadata["id"],
             name=metadata["name"],
             description=metadata["description"],
             version=str(metadata["version"]),
             author=metadata["author"],
-            applies_to=list(metadata["applies_to"]),
+            applies_to=applies_to,
             priority=int(metadata["priority"]),
             tags=list(metadata.get("tags") or []),
             config_schema=dict(metadata.get("config_schema") or {}),
@@ -147,13 +129,18 @@ class SkillRegistry:
         if skill_type == "perspective":
             tags.append("author-style")
 
+        applies_to_value = frontmatter.get("applies_to") or default_applies_to
+        if not isinstance(applies_to_value, (list, tuple)):
+            applies_to_value = [applies_to_value]
+        applies_to = list(applies_to_value)
+
         return {
             "id": skill_id,
             "name": str(frontmatter.get("name") or skill_id),
             "description": str(frontmatter.get("description") or ""),
             "version": str(frontmatter.get("version") or "1.0"),
             "author": str(frontmatter.get("author") or "external-skill"),
-            "applies_to": list(frontmatter.get("applies_to") or default_applies_to),
+            "applies_to": applies_to,
             "priority": int(frontmatter.get("priority") or priority),
             "tags": list(frontmatter.get("tags") or tags),
             "config_schema": dict(frontmatter.get("config_schema") or self._default_config_schema()),

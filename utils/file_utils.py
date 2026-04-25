@@ -1,8 +1,30 @@
+import os
+import tempfile
 from pathlib import Path
 from config import PROMPTS_DIR, OUTPUTS_ROOT
 from utils.logger import logger
-from utils.runtime_context import get_current_output_dir as get_runtime_output_dir
-from utils.runtime_context import set_current_output_dir
+from utils.runtime_context import get_current_output_dir, set_current_output_dir
+
+
+def write_file_atomic(path: Path, content: str, encoding: str = "utf-8") -> None:
+    """
+    原子写入文件，使用临时文件+重命名模式，防止进程中途退出导致文件损坏
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 创建临时文件在同一目录下，确保重命名是原子操作
+    fd, temp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as f:
+            f.write(content)
+        # 原子重命名
+        os.replace(temp_path, path)
+    except Exception:
+        # 出错时清理临时文件
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+        raise
 
 
 def set_output_dir(novel_name: str) -> Path:
@@ -19,11 +41,6 @@ def set_output_dir(novel_name: str) -> Path:
     return output_dir
 
 
-def get_current_output_dir() -> Path:
-    """获取当前小说的输出目录"""
-    return get_runtime_output_dir()
-
-
 LEGACY_PERSPECTIVE_SKILL_MAPPING = {
     "liu-cixin": "liu-cixin-perspective",
     "jin-yong": "jin-yong-perspective",
@@ -32,6 +49,13 @@ LEGACY_PERSPECTIVE_SKILL_MAPPING = {
     "ernest-hemingway": "ernest-hemingway-perspective",
     "yu-hua": "yu-hua-perspective",
     "lu-xun": "lu-xun-perspective",
+    "ai-qianshui-de-wuzei": "ai-qianshui-de-wuzei-perspective",
+    "chunjie-di-xiaolong": "chunjie-di-xiaolong-perspective",
+    "fenghuo": "fenghuo-perspective",
+    "huwei-debi": "huwei-debi-perspective",
+    "liudanpashui": "liudanpashui-perspective",
+    "tangjiashao": "tangjiashao-perspective",
+    "yuyuzhu": "yuyuzhu-perspective",
 }
 
 
@@ -41,8 +65,6 @@ def load_prompt(
     context: dict = None,
     perspective: str = None,
     perspective_strength: float = None,
-    skill_ids: list[str] = None,
-    skill_configs: dict = None,
     project_config: dict = None,
 ) -> str:
     """
@@ -52,8 +74,6 @@ def load_prompt(
     :param context: 占位符替换上下文，key 是占位符名称（不含 {{}}），value 是替换内容
     :param perspective: 旧版作家视角ID，若指定会映射到内置 Skill（兼容旧项目）
     :param perspective_strength: 旧版视角注入强度 (0.0-1.0)
-    :param skill_ids: 显式启用的 Skill ID 列表
-    :param skill_configs: 每个 Skill 的配置
     :param project_config: 项目配置，支持 config.skills.enabled
     :return: 提示词内容
     """
@@ -96,18 +116,15 @@ def load_prompt(
         project_config=project_config,
         perspective=perspective,
         perspective_strength=perspective_strength,
-        skill_ids=skill_ids,
     )
     try:
-        from core.skill_runtime import SkillAssembler, SkillInjector
+        from core.skill_runtime import SkillAssembler, inject_skill_layer
 
         assembled_skills = SkillAssembler().assemble(
             agent_name,
             project_config=skill_project_config,
-            skill_ids=skill_ids,
-            skill_configs=skill_configs,
         )
-        content = SkillInjector().inject(content, assembled_skills)
+        content = inject_skill_layer(content, assembled_skills)
         skill_injected = bool(assembled_skills)
     except Exception as e:
         logger.warning(f"Skill 注入失败，使用原始prompt继续: {e}")
@@ -115,30 +132,8 @@ def load_prompt(
         if "{{skill_layer}}" in content:
             content = content.replace("{{skill_layer}}", "")
 
-    # 第三步：无法映射为 Skill 的旧 perspective 才回退到旧注入器。Critic 保持中立，不做旧注入。
-    if perspective and not skill_injected and agent_name != "critic":
-        try:
-            from core.perspective_engine import PerspectiveEngine
-            engine = PerspectiveEngine(perspective)
-            # 使用视角推荐强度如果没指定
-            strength = perspective_strength
-            if strength is None and engine.perspective_data and 'strength_recommended' in engine.perspective_data:
-                strength = engine.perspective_data['strength_recommended']
-            elif strength is None:
-                strength = 0.7
-
-            # 根据agent类型选择注入方法
-            if agent_name == 'planner':
-                content = engine.inject_for_planner(content, strength=strength)
-            elif agent_name == 'writer':
-                content = engine.inject_for_writer(content, strength=strength)
-            elif agent_name == 'critic':
-                content = engine.inject_for_critic(content, strength=strength)
-            elif agent_name == 'revise':
-                content = engine.inject_for_revise(content, strength=strength)
-            # 其他agent类型不支持注入，直接返回原内容
-        except Exception as e:
-            logger.warning(f"视角注入失败，使用原始prompt: {e}")
+    # Note: PerspectiveEngine 已完全迁移到 SkillRuntime 系统
+    # 旧 perspective 参数通过 _project_config_with_legacy_perspective 自动映射
 
     # 第四步：替换占位符
     if context:
@@ -154,11 +149,10 @@ def _project_config_with_legacy_perspective(
     project_config: dict = None,
     perspective: str = None,
     perspective_strength: float = None,
-    skill_ids: list[str] = None,
 ) -> dict:
     project_config = dict(project_config or {})
     configured_skills = ((project_config.get("skills") or {}).get("enabled") or [])
-    if configured_skills or skill_ids or not perspective:
+    if configured_skills or not perspective:
         return project_config
 
     skill_id = LEGACY_PERSPECTIVE_SKILL_MAPPING.get(perspective)
@@ -169,6 +163,7 @@ def _project_config_with_legacy_perspective(
         "enabled": [
             {
                 "skill_id": skill_id,
+                "applies_to": ["planner", "writer", "revise"],
                 "config": {
                     "strength": perspective_strength if perspective_strength is not None else 0.7,
                     "mode": "style_only",

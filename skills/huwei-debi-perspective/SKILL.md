@@ -2,6 +2,9 @@
 name: 狐尾的笔视角
 description: 网文"道诡流"开创者的创作心法，基于作品文本和作者公告提炼，包含5个核心心智模型。核心能力：体验优先、折磨派叙事、东西方元素无缝融合、创新突围战略、质量优先主义。触发词：狐尾、道诡异仙、李火旺、克苏鲁修仙、发疯文学
 type: person-perspective
+tags: ["perspective", "author-style"]
+applies_to: ["planner", "writer", "revise"]
+priority: 50
 version: 1.0
 ---
 

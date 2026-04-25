@@ -34,6 +34,10 @@ celery_app.conf.update(
     task_track_started=True,  # 允许追踪STARTED状态
     result_expires=86400,  # 任务结果保留24小时
     worker_concurrency=1,  # 默认单worker，因为每个生成任务已经大量调用LLM
+    task_time_limit=28800,  # 硬超时8小时
+    task_soft_time_limit=27000,  # 软超时7.5小时
+    acks_late=True,  # 任务完成后才确认
+    task_reject_on_worker_lost=True,  # worker丢失时重新入队
 )
 
 # 自动发现tasks目录下的任务

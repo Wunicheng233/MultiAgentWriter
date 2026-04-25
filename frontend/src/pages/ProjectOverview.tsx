@@ -266,7 +266,8 @@ function renderWorkflowMeta(workflow?: WorkflowRun): Array<{ label: string; valu
 
 export const ProjectOverview: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const projectId = parseInt(id!, 10)
+  const projectId = id ? parseInt(id, 10) : 0
+  const isValidProjectId = !Number.isNaN(projectId) && projectId > 0
   const { showToast } = useToast()
   const user = useAuthStore(state => state.user)
   const queryClient = useQueryClient()
@@ -274,12 +275,13 @@ export const ProjectOverview: React.FC = () => {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
+    enabled: isValidProjectId,
   })
 
   const { data: tokenStats } = useQuery({
     queryKey: ['project-token-stats', projectId],
     queryFn: () => getProjectTokenStats(projectId),
-    enabled: !!data,
+    enabled: isValidProjectId && !!data,
   })
 
   const { data: recentArtifacts } = useQuery({
@@ -289,7 +291,7 @@ export const ProjectOverview: React.FC = () => {
       current_only: true,
       include_content: false,
     }),
-    enabled: !!data,
+    enabled: isValidProjectId && !!data,
   })
 
   const { data: collaborators = [] } = useQuery({

@@ -6,14 +6,14 @@ Critic Agent - 章节评审员
 遵循设计文档：Writer → System Guardrails → Critic → Revise → (Critic 复评)
 """
 
-import json
-import re
 import openai
 from typing import Tuple, List, Dict, Optional
 from utils.volc_engine import call_volc_api
 from utils.logger import logger
 from core.config import settings
-from config import PROMPTS_DIR, CRITIC_PASS_SCORE
+from config import CRITIC_PASS_SCORE
+from utils.file_utils import load_prompt
+from utils.json_utils import parse_json_result
 
 CRITIC_V2_DIMENSIONS = (
     "plot_progress",
@@ -35,7 +35,7 @@ def critic_chapter(
     perspective: str = None,
     perspective_strength: float = 0.7,
     project_config: dict = None,
-) -> Tuple:
+) -> Tuple[bool, int, Dict, List, Optional[Dict]]:
     """
     评审章节，输出 JSON 格式的评审结果。
 
@@ -49,15 +49,10 @@ def critic_chapter(
         perspective_strength: 视角强度
 
     Returns:
-        (passed: 是否通过, score: 总分 1-10, dimensions: 各维度评分, issues: 问题列表)
+        (passed: 是否通过, score: 总分 1-10, dimensions: 各维度评分, issues: 问题列表, critique_v2: V2诊断数据)
         issues 列表中每个item包含: {type, location, fix}
     """
-    # 读取 prompt 模板
-    prompt_path = PROMPTS_DIR / "critic.md"
-    with open(prompt_path, 'r', encoding='utf-8') as f:
-        template = f.read().strip()
-
-    # 占位符替换
+    # 占位符替换上下文
     context = {
         "chapter_content": chapter_content,
         "world_bible": setting_bible,
@@ -65,11 +60,15 @@ def critic_chapter(
         "content_type": content_type,
     }
 
-    for key, value in context.items():
-        # 世界圣经太长，截断保留核心部分
-        if key == "world_bible" and len(str(value)) > 2500:
-            value = str(value)[:2500] + "\n...（内容过长已截断）"
-        template = template.replace(f"{{{{{key}}}}}", str(value))
+    # 使用统一的 load_prompt 加载提示词（支持 Skill 注入）
+    template = load_prompt(
+        "critic",
+        content_type=content_type,
+        context=context,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
     logger.info(f"🔍 Critic Agent正在评审章节，等待结果...")
     temperature = settings.get_temperature_for_agent("critic")
@@ -92,7 +91,7 @@ def critic_chapter(
             "type": "格式问题",
             "location": "全文",
             "fix": "重新生成，确保输出严格符合JSON格式"
-        }]
+        }], None
 
     passed = data.get("passed", False)
     score = data.get("score", 5)
@@ -133,37 +132,5 @@ def critic_chapter(
     if critique_v2 is None and any(field in data for field in CRITIC_V2_DIMENSIONS):
         critique_v2 = {field: data.get(field, []) for field in CRITIC_V2_DIMENSIONS}
 
-    if critique_v2 is not None:
-        return passed, score, dimensions, issues, critique_v2
-
-    return passed, score, dimensions, issues
-
-
-def parse_json_result(result: str) -> Optional[Dict]:
-    """从输出中提取并解析JSON。"""
-    try:
-        # 尝试提取被markdown包裹的JSON
-        json_text = extract_json_from_markdown(result)
-        data = json.loads(json_text)
-        return data
-    except Exception as e:
-        logger.warning(f"JSON解析失败: {e}")
-        return None
-
-
-def extract_json_from_markdown(text: str) -> str:
-    """从markdown中提取JSON内容。"""
-    # 匹配 ```json ... ```
-    json_block_pattern = r'```(?:json)?\s*({[\s\S]*?})\s*```'
-    match = re.search(json_block_pattern, text)
-    if match:
-        return match.group(1)
-
-    # 匹配 {...} 整块
-    curly_pattern = r'({[\s\S]*})'
-    match = re.search(curly_pattern, text)
-    if match:
-        return match.group(1)
-
-    # 如果都没找到，返回原文本尝试直接解析
-    return text.strip()
+    # 固定返回 5 元组，确保所有代码路径返回相同结构
+    return passed, score, dimensions, issues, critique_v2

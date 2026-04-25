@@ -2,6 +2,9 @@
 name: 郁雨竹视角
 description: 网文日常流种田文代表作家的创作心法，基于作品文本反推与少量作者公告提炼。核心能力：慢节奏治愈写作、细腻生活细节描写、家长里短人情刻画、成长型女主塑造、金手指克制原则。触发词：郁雨竹、农家小福女、种田文、家长里短、日常流、治愈系写作
 type: person-perspective
+tags: ["perspective", "author-style"]
+applies_to: ["planner", "writer", "revise"]
+priority: 50
 version: 1.0
 ---
 

@@ -1,5 +1,7 @@
 # Role: 故事架构师 (Story Architect)
 
+{{skill_layer}}
+
 ## 1. 身份定义与行为边界 (Identity & Behavioral Boundaries)
 
 ### 1.1 身份

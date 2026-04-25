@@ -9,6 +9,7 @@ Planner (设定圣经+大纲) → 逐章循环 Writer → Guardrails → Critic 
 """
 
 import json
+import re
 import yaml
 import openai
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Dict, List, Optional, Tuple, Callable
 from datetime import datetime
 
 from .config import settings
+from utils.file_utils import write_file_atomic
 from .agent_pool import (
     PlannerAgent, WriterAgent, CriticAgent, ReviseAgent,
     agent_pool
@@ -42,6 +44,88 @@ from utils.vector_db import (
     add_chapter_to_db,
     reset_current_db
 )
+
+
+def _merge_guardrail_issues_into_review(guardrail_result: GuardrailResult, issues: List[Dict], guardrail_context: Dict) -> bool:
+    """
+    将系统防护发现的问题合并到 Critic issues，让 Revise 真正修复这些问题。
+
+    Returns:
+        是否仍然通过（True 表示不需要因为 guardrails 强制失败）
+    """
+    ok = True
+    word_count = guardrail_result.metrics.get("word_count", 0)
+    target_wc = max(1, int(guardrail_context.get("target_word_count", 2000)))
+    if word_count > 0:
+        deviation = abs(word_count - target_wc) / target_wc
+        if deviation > 0.30:
+            if word_count < target_wc:
+                issues.append(
+                    {
+                        "type": "字数不足",
+                        "location": "全文",
+                        "fix": (
+                            f"本章实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节："
+                            "增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。"
+                        ),
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "type": "字数超标",
+                        "location": "全文",
+                        "fix": f"本章实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。",
+                    }
+                )
+            ok = False
+
+    if "G-05" in guardrail_result.violations:
+        issues.append(
+            {
+                "type": "格式问题",
+                "location": "全文",
+                "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。",
+            }
+        )
+        ok = False
+
+    if "G-09" in guardrail_result.violations:
+        cliches = guardrail_result.violations["G-09"]
+        issues.append(
+            {
+                "type": "文风问题",
+                "location": "全文",
+                "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。",
+            }
+        )
+        ok = False
+
+    has_protagonist_issue = any(
+        sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg
+    )
+    if has_protagonist_issue:
+        issues.append(
+            {
+                "type": "剧情问题",
+                "location": "本章",
+                "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。",
+            }
+        )
+        ok = False
+
+    has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
+    if has_hook_issue:
+        issues.append(
+            {
+                "type": "结构问题",
+                "location": "本章结尾",
+                "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。",
+            }
+        )
+        ok = False
+
+    return ok
 
 
 class WaitingForConfirmationError(Exception):
@@ -206,7 +290,7 @@ class NovelOrchestrator:
             content_type=self.content_type,
             chapter_index=chapter_index,
             revision_round=revision_round,
-            perspective=None,
+            perspective=self.writer_perspective if self.use_perspective_critic else None,
             perspective_strength=self.perspective_strength,
         )
         if not hasattr(self, "evaluation_reports"):
@@ -259,8 +343,8 @@ class NovelOrchestrator:
 
         self.novel_name = self.req.get("novel_name", "未命名小说").strip(' "\'')
         novel_description = self.req.get("novel_description", "").strip(' "\'')
-        core_requirement = self.req["core_requirement"].strip(' "\'')
-        target_platform = self.req["target_platform"].strip(' "\'')
+        core_requirement = self.req.get("core_requirement", "").strip(' "\'') or "无核心要求"
+        target_platform = self.req.get("target_platform", "").strip(' "\'') or "通用平台"
         self.chapter_word_count = str(self.req.get("chapter_word_count", 2000))
         self.start_chapter = self.req.get("start_chapter", 1)
         self.end_chapter = self.req.get("end_chapter", 1)
@@ -350,14 +434,14 @@ class NovelOrchestrator:
                     logger.info("Planner方案生成完成")
 
             # 保存小说基础信息
-            with open(self.info_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "name": self.novel_name,
-                    "description": novel_description,
-                    "core_requirement": core_requirement,
-                    "created_at": str(datetime.now()),
-                    "architecture": "slim-v2"  # 标记精简架构
-                }, f, ensure_ascii=False, indent=2)
+            info_content = json.dumps({
+                "name": self.novel_name,
+                "description": novel_description,
+                "core_requirement": core_requirement,
+                "created_at": str(datetime.now()),
+                "architecture": "slim-v2"  # 标记精简架构
+            }, ensure_ascii=False, indent=2)
+            write_file_atomic(self.info_path, info_content)
 
             # 人工确认流程
             # 只有当这是首次生成（策划文件不存在）或者刚刚修改了策划（有反馈待确认）才需要等待确认
@@ -412,10 +496,8 @@ class NovelOrchestrator:
                         # 非交互式环境（Web/Celery），需要等待用户确认
                         # 先保存当前方案，然后抛出异常让上层处理
                         logger.info("非交互式运行，策划方案已生成，等待用户确认...")
-                        with open(self.output_dir / "novel_plan.md", "w", encoding="utf-8") as f:
-                            f.write(self.plan)
-                        with open(self.output_dir / "setting_bible.md", "w", encoding="utf-8") as f:
-                            f.write(self.setting_bible)
+                        write_file_atomic(self.output_dir / "novel_plan.md", self.plan)
+                        write_file_atomic(self.output_dir / "setting_bible.md", self.setting_bible)
                         raise WaitingForConfirmationError(0, self.plan[:2000])
 
         else:
@@ -480,19 +562,6 @@ class NovelOrchestrator:
                 return outline.get("target_word_count", int(self.chapter_word_count))
         return int(self.chapter_word_count)
 
-    def _ensure_workflow_optimization_state(self):
-        """Initialize workflow-v2 in-memory artifact buffers for legacy tests."""
-        if not hasattr(self, "scene_anchor_plans"):
-            self.scene_anchor_plans = []
-        if not hasattr(self, "repair_traces"):
-            self.repair_traces = []
-        if not hasattr(self, "stitching_reports"):
-            self.stitching_reports = []
-        if not hasattr(self, "novel_state_snapshots"):
-            self.novel_state_snapshots = []
-        if not hasattr(self, "novel_state_service") or self.novel_state_service is None:
-            self.novel_state_service = NovelStateService(getattr(self, "output_dir", None))
-
     def build_chapter_context(
         self,
         chapter_index: int,
@@ -501,7 +570,6 @@ class NovelOrchestrator:
         target_word_count: int,
     ) -> Tuple[str, List[Dict]]:
         """Assemble continuous chapter context with scene anchors and NovelState."""
-        self._ensure_workflow_optimization_state()
         scene_anchors = parse_scene_anchors_from_outline(
             chapter_plot,
             default_word_count=target_word_count,
@@ -573,7 +641,6 @@ class NovelOrchestrator:
         revise_round: int,
     ) -> Tuple[str, bool, List[Dict]]:
         """Apply local repairs when possible; return content, used_local, trace."""
-        self._ensure_workflow_optimization_state()
         repair_trace: List[Dict] = []
         used_local_repair = False
         normalized_issues = [self._normalize_repair_issue(issue) for issue in (issues or [])]
@@ -643,7 +710,6 @@ class NovelOrchestrator:
 
     def run_stitching_pass(self, chapter_index: int, chapter_content: str, repair_trace: List[Dict]) -> str:
         """Repair transitions and voice after local patches."""
-        self._ensure_workflow_optimization_state()
         stitcher = getattr(self.revise, "stitch_chapter", None)
         if not stitcher:
             self.stitching_reports.append({
@@ -674,7 +740,6 @@ class NovelOrchestrator:
         return stitched or chapter_content
 
     def _record_novel_state_snapshot(self, chapter_index: int, chapter_content: str, scene_anchors: List[Dict]):
-        self._ensure_workflow_optimization_state()
         delta = self.novel_state_service.extract_state_delta_from_chapter(
             chapter_index,
             chapter_content,
@@ -747,7 +812,6 @@ class NovelOrchestrator:
         logger.info(f"运行系统层防护检查...")
         # 提取主角姓名（从设定圣经中简单提取，找不到就留空）
         protagonist_name = ""
-        import re
         match = re.search(r'主角[:：]\s*([^\n]+)', self.setting_bible)
         if match:
             protagonist_name = match.group(1).strip()
@@ -776,87 +840,6 @@ class NovelOrchestrator:
 
         logger.info(f"系统层防护完成，通过: {guardrail_result.passed}")
 
-        def _merge_guardrail_issues_into_review(guardrail_result: GuardrailResult, issues: List[Dict]) -> bool:
-            """
-            将系统防护发现的问题合并到 Critic issues，让 Revise 真正修复这些问题。
-
-            Returns:
-                是否仍然通过（True 表示不需要因为 guardrails 强制失败）
-            """
-            ok = True
-            word_count = guardrail_result.metrics.get("word_count", 0)
-            target_wc = guardrail_context["target_word_count"]
-            if word_count > 0:
-                deviation = abs(word_count - target_wc) / target_wc
-                if deviation > 0.30:
-                    if word_count < target_wc:
-                        issues.append(
-                            {
-                                "type": "字数不足",
-                                "location": "全文",
-                                "fix": (
-                                    f"本章实际只有 {word_count} 字，目标要求 {target_wc} 字，请大幅扩展细节："
-                                    "增加场景描写、人物动作表情、心理活动、环境氛围描写，把字数增加到目标要求。"
-                                ),
-                            }
-                        )
-                    else:
-                        issues.append(
-                            {
-                                "type": "字数超标",
-                                "location": "全文",
-                                "fix": f"本章实际 {word_count} 字，目标要求 {target_wc} 字，请适当精简内容，压缩到目标字数范围内。",
-                            }
-                        )
-                    ok = False
-
-            if "G-05" in guardrail_result.violations:
-                issues.append(
-                    {
-                        "type": "格式问题",
-                        "location": "全文",
-                        "fix": "存在段落过长，请拆分长段落为短段落，每段1-3句话，符合手机阅读要求。",
-                    }
-                )
-                ok = False
-
-            if "G-09" in guardrail_result.violations:
-                cliches = guardrail_result.violations["G-09"]
-                issues.append(
-                    {
-                        "type": "文风问题",
-                        "location": "全文",
-                        "fix": f"检测到以下AI套话：{cliches}，请删除这些套话，改用更自然的表达方式。",
-                    }
-                )
-                ok = False
-
-            has_protagonist_issue = any(
-                sugg for sugg in guardrail_result.suggestions if "主角" in sugg and "未出场" in sugg
-            )
-            if has_protagonist_issue:
-                issues.append(
-                    {
-                        "type": "剧情问题",
-                        "location": "本章",
-                        "fix": "主角在本章没有出场，请确保主角出场参与剧情，符合大纲要求。",
-                    }
-                )
-                ok = False
-
-            has_hook_issue = any(sugg for sugg in guardrail_result.suggestions if "结尾缺少" in sugg)
-            if has_hook_issue:
-                issues.append(
-                    {
-                        "type": "结构问题",
-                        "location": "本章结尾",
-                        "fix": "本章结尾缺少吸引人的悬念钩子，请修改结尾，让结尾落在冲突点或悬念上，引发读者好奇心。",
-                    }
-                )
-                ok = False
-
-            return ok
-
         # Step 3: Critic 评审
         chapter_outline = self.get_chapter_outline(chapter_index)
         passed, score, dimensions, issues = self._run_critic_harness(
@@ -867,19 +850,11 @@ class NovelOrchestrator:
         )
 
         # 保存本章维度评分
-        if not hasattr(self, 'dimension_scores'):
-            self.dimension_scores = {
-                "plot": [],
-                "character": [],
-                "hook": [],
-                "writing": [],
-                "setting": [],
-            }
         for dim, score_val in dimensions.items():
             if dim in self.dimension_scores:
                 self.dimension_scores[dim].append(score_val)
 
-        passed = passed and _merge_guardrail_issues_into_review(guardrail_result, issues)
+        passed = passed and _merge_guardrail_issues_into_review(guardrail_result, issues, guardrail_context)
 
         revise_count = 0
         max_revise_loops = self.MAX_REVISE_LOOPS
@@ -903,19 +878,21 @@ class NovelOrchestrator:
             revise_count += 1
             self._check_cancellation()
 
-            # 再次运行系统层防护（修订后可能格式有变化
-            guardrail_result = run_system_guardrails(current_content, guardrail_context)
-            current_content = guardrail_result.corrected_content
-
-            passed = passed and _merge_guardrail_issues_into_review(guardrail_result, issues)
-
-            # Step 5: Critic 复评
+            # Step 5: Critic 复评（在 guardrail 之前，先获得评审再做修订后的内容
             passed, score, dimensions, issues = self._run_critic_harness(
                 chapter_index=chapter_index,
                 chapter_content=current_content,
                 chapter_outline=chapter_outline,
                 revision_round=revise_count,
             )
+
+            # 再次运行系统层防护（修订后可能格式有变化）
+            guardrail_result = run_system_guardrails(current_content, guardrail_context)
+            current_content = guardrail_result.corrected_content
+
+            # Merge guardrail issues 并更新 passed 状态（在 Critic 复评之后）
+            guardrail_passed = _merge_guardrail_issues_into_review(guardrail_result, issues, guardrail_context)
+            passed = passed and guardrail_passed
             # 更新维度评分
             for dim, score_val in dimensions.items():
                 if dim in self.dimension_scores:
@@ -1002,11 +979,8 @@ class NovelOrchestrator:
 
     def save_chapter(self, chapter_index: int, content: str):
         """保存章节到 chapters 子目录。"""
-        chapters_dir = self.output_dir / "chapters"
-        chapters_dir.mkdir(exist_ok=True)
-        chapter_file = chapters_dir / f"chapter_{chapter_index}.txt"
-        with open(chapter_file, "w", encoding="utf-8") as f:
-            f.write(content)
+        chapter_file = self.output_dir / "chapters" / f"chapter_{chapter_index}.txt"
+        write_file_atomic(chapter_file, content)
 
     def run_full_novel(
         self,
@@ -1060,7 +1034,8 @@ class NovelOrchestrator:
                     continue
 
                 done_chapters = chapter_num - self.start_chapter
-                percent = 20 + int((done_chapters / total_chapters_count) * 70)
+                safe_total = max(1, total_chapters_count)
+                percent = 20 + int((done_chapters / safe_total) * 70)
                 self._report_progress(percent, f"正在生成第 {chapter_num} 章...")
 
                 chapter_file = self.output_dir / "chapters" / f"chapter_{chapter_num}.txt"
@@ -1120,7 +1095,6 @@ class NovelOrchestrator:
                     prev_chapter_end = existing_content[-500:] if len(existing_content) > 500 else existing_content
                     logger.info(f"第{chapter_num}章已生成文件存在，跳过（断点续跑）")
                     # 统计真实汉字数量（只统计中文字符，不含标点空格）
-                    import re
                     chinese_chars = re.findall(r'[\u4e00-\u9fff]', existing_content)
                     words = len(chinese_chars)
                     generated.append({"num": chapter_num, "words": words})
@@ -1128,12 +1102,16 @@ class NovelOrchestrator:
                 else:
                     # 正常生成新章节
                     # 即使生成失败或合规检查不通过，也不轻易跳过，保留已有内容供用户检查
+                    current_content = None  # 预初始化，避免作用域问题
+                    score = 0
+                    passed = False
+                    issues = []
                     try:
                         current_content, score, passed, issues = self.run_chapter_generation(chapter_num, prev_chapter_end)
                     except Exception as e:
                         logger.error(f"第 {chapter_num} 章生成过程发生异常: {e}，尝试保存已有内容继续")
                         # 如果生成失败但已有部分内容，仍然继续处理
-                        if 'current_content' not in locals():
+                        if current_content is None or not current_content.strip():
                             # 完全失败，创建一个占位章节说明错误
                             current_content = f"第{chapter_num}章\n\n生成失败: {str(e)}\n请尝试重新生成此章节"
                             score = 0
@@ -1161,7 +1139,6 @@ class NovelOrchestrator:
                 with open(chapter_file, "r", encoding="utf-8") as f:
                     content = f.read()
                 # 统计真实汉字数量（只统计中文字符，不含标点空格）
-                import re
                 chinese_chars = re.findall(r'[\u4e00-\u9fff]', content)
                 words = len(chinese_chars)
                 generated.append({"num": chapter_num, "words": words})
@@ -1228,8 +1205,8 @@ class NovelOrchestrator:
                 info["novel_state_snapshots"] = getattr(self, "novel_state_snapshots", [])
                 info["architecture"] = "slim-v2"
                 # 保存回info.json
-                with open(self.info_path, "w", encoding="utf-8") as f:
-                    json.dump(info, f, ensure_ascii=False, indent=2)
+                info_content = json.dumps(info, ensure_ascii=False, indent=2)
+                write_file_atomic(self.info_path, info_content)
                 logger.info(f"📊 总体质量评分: {overall_score:.2f}/10")
 
             # 输出统计结果

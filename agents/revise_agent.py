@@ -11,7 +11,8 @@ import openai
 from utils.volc_engine import call_volc_api
 from utils.logger import logger
 from core.config import settings
-from config import PROMPTS_DIR
+from utils.file_utils import load_prompt
+from utils.json_utils import parse_json_result
 
 
 def revise_chapter(
@@ -37,20 +38,21 @@ def revise_chapter(
     Returns:
         修订后的完整章节正文
     """
-    # 读取 prompt 模板
-    prompt_path = PROMPTS_DIR / "revise.md"
-    with open(prompt_path, 'r', encoding='utf-8') as f:
-        template = f.read().strip()
-
-    # 占位符替换
+    # 占位符替换上下文
     context = {
         "original_chapter": original_chapter,
         "critic_issues": json.dumps(critic_issues, ensure_ascii=False, indent=2),
         "world_bible": setting_bible,
     }
 
-    for key, value in context.items():
-        template = template.replace(f"{{{{{key}}}}}", str(value))
+    # 使用统一的 load_prompt 加载提示词（支持 Skill 注入）
+    template = load_prompt(
+        "revise",
+        context=context,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
     logger.info(f"✂️  Revise Agent正在修订章节，问题数: {len(critic_issues)}")
     temperature = settings.get_temperature_for_agent("revise")
@@ -76,10 +78,6 @@ def revise_local_patch(
     project_config: dict = None,
 ) -> dict:
     """Revise only the target fragment with adjacent context preserved."""
-    prompt_path = PROMPTS_DIR / "revise_local_patch.md"
-    with open(prompt_path, "r", encoding="utf-8") as f:
-        template = f.read().strip()
-
     context = {
         "world_bible": setting_bible,
         "repair_issue": json.dumps(repair_issue, ensure_ascii=False, indent=2),
@@ -87,8 +85,14 @@ def revise_local_patch(
         "original_chapter_excerpt": _build_local_excerpt(local_context),
     }
 
-    for key, value in context.items():
-        template = template.replace(f"{{{{{key}}}}}", str(value))
+    # 使用统一的 load_prompt 加载提示词（支持 Skill 注入）
+    template = load_prompt(
+        "revise_local_patch",
+        context=context,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
     logger.info("✂️  Revise Agent正在执行局部片段修复")
     temperature = settings.get_temperature_for_agent("revise")
@@ -101,7 +105,7 @@ def revise_local_patch(
         perspective_strength=perspective_strength,
         project_config=project_config,
     )
-    patch = _parse_json_result(result)
+    patch = parse_json_result(result)
     if patch:
         return {
             "target_text": str(patch.get("target_text") or local_context.get("target") or ""),
@@ -125,18 +129,20 @@ def stitch_chapter(
     project_config: dict = None,
 ) -> str:
     """Run a bounded stitching pass after local repairs."""
-    prompt_path = PROMPTS_DIR / "stitch.md"
-    with open(prompt_path, "r", encoding="utf-8") as f:
-        template = f.read().strip()
-
     context = {
         "world_bible": setting_bible,
         "chapter_content": chapter_content,
         "repair_trace": json.dumps(repair_trace, ensure_ascii=False, indent=2),
     }
 
-    for key, value in context.items():
-        template = template.replace(f"{{{{{key}}}}}", str(value))
+    # 使用统一的 load_prompt 加载提示词（支持 Skill 注入）
+    template = load_prompt(
+        "stitch",
+        context=context,
+        perspective=perspective,
+        perspective_strength=perspective_strength,
+        project_config=project_config,
+    )
 
     logger.info("🪡 Revise Agent正在执行章节拼接连贯性修复")
     temperature = settings.get_temperature_for_agent("revise")
@@ -149,7 +155,7 @@ def stitch_chapter(
         perspective_strength=perspective_strength,
         project_config=project_config,
     )
-    data = _parse_json_result(result)
+    data = parse_json_result(result)
     if data and data.get("chapter_content"):
         return str(data["chapter_content"]).strip()
     return result.strip() or chapter_content
@@ -163,17 +169,3 @@ def _build_local_excerpt(local_context: dict) -> str:
     if local_context.get("next"):
         parts.append(f"【后一段】\n{local_context['next']}")
     return "\n\n".join(parts)
-
-
-def _parse_json_result(result: str) -> dict | None:
-    try:
-        text = result.strip()
-        if text.startswith("```"):
-            import re
-
-            match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
-            if match:
-                text = match.group(1).strip()
-        return json.loads(text)
-    except Exception:
-        return None

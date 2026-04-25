@@ -11,7 +11,8 @@ def _check_and_fix_title(result: str, chapter_num: int) -> str:
     检查生成结果是否有正确的章节标题，如果没有则自动添加默认标题
     内部工具函数，不对外导出
     """
-    first_line = result.split('\n')[0].strip()
+    lines = result.split('\n', 1)
+    first_line = lines[0].strip() if lines else ""
     # 去除Markdown标题符号 # 再检查
     clean_first_line = first_line.lstrip('#').strip()
 
@@ -55,12 +56,12 @@ def generate_chapter(
         forbidden_text = constraints.get('forbidden', '')
         constraints_text = f"""
 === 全局世界观强制约束（必须严格遵守）===
-当前章节：第{constraints['current_chapter']}章
-当前故事推进时间：{constraints['current_time']}
-已发生事件：{constraints['already_happened_events']}
-角色信息：{constraints['characters_info']}
-世界观规则：{constraints['world_rules']}
-未回收伏笔：{constraints['unfinished_foreshadows']}
+当前章节：第{constraints.get('current_chapter', '?')}章
+当前故事推进时间：{constraints.get('current_time', '未知')}
+已发生事件：{constraints.get('already_happened_events', '无')}
+角色信息：{constraints.get('characters_info', '无')}
+世界观规则：{constraints.get('world_rules', '无')}
+未回收伏笔：{constraints.get('unfinished_foreshadows', '无')}
 {forbidden_text}
 """
 
@@ -97,42 +98,30 @@ def generate_chapter(
     # 构建占位符替换上下文
     context = {
         "world_bible": setting_bible,
+        "chapter_outline": plan,
+        "previous_summary": prev_chapter_end,
+        "content_type": content_type,
         "target_word_count": str(target_word_count),
     }
 
-    # 第一次生成
-    if client:
-        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
-    else:
-        result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
+    # 第一次生成（client为None时call_volc_api内部会处理）
+    result = call_volc_api("writer", user_input, max_tokens=WRITER_MAX_TOKENS, content_type=content_type, context=context, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
     fixed_result = _check_and_fix_title(result, chapter_num)
 
     if fixed_result != result:
         # 第一次没标题，重试一次
         logger.warning(f"第{chapter_num}章生成忘记写标题，自动重试...")
-        if client:
-            result = call_volc_api(
-                "writer",
-                user_input,
-                max_tokens=WRITER_MAX_TOKENS,
-                content_type=content_type,
-                context=context,
-                client=client,
-                perspective=perspective,
-                perspective_strength=perspective_strength,
-                project_config=project_config,
-            )
-        else:
-            result = call_volc_api(
-                "writer",
-                user_input,
-                max_tokens=WRITER_MAX_TOKENS,
-                content_type=content_type,
-                context=context,
-                perspective=perspective,
-                perspective_strength=perspective_strength,
-                project_config=project_config,
-            )
+        result = call_volc_api(
+            "writer",
+            user_input,
+            max_tokens=WRITER_MAX_TOKENS,
+            content_type=content_type,
+            context=context,
+            client=client,
+            perspective=perspective,
+            perspective_strength=perspective_strength,
+            project_config=project_config,
+        )
         fixed_result = _check_and_fix_title(result, chapter_num)
 
     return fixed_result
@@ -150,7 +139,8 @@ def rewrite_chapter(
 ) -> str:
     # 从原文提取章节号（如果没传入）
     if chapter_num is None:
-        first_line = original_draft.split('\n')[0].strip()
+        lines = original_draft.split('\n', 1)
+        first_line = lines[0].strip() if lines else ""
         match = re.search(r'第(\d+)章', first_line)
         if match:
             chapter_num = int(match.group(1))
@@ -188,10 +178,7 @@ def rewrite_chapter(
 """
 
     logger.info("✍️  内容生成Agent正在修改章节...")
-    if client:
-        result = call_volc_api("writer", user_input, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
-    else:
-        result = call_volc_api("writer", user_input, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
+    result = call_volc_api("writer", user_input, client=client, perspective=perspective, perspective_strength=perspective_strength, project_config=project_config)
 
     # 检测并修复标题
     if chapter_num:

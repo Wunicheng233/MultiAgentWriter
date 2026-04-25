@@ -38,7 +38,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     content_type = Column(String(20), default="full_novel")  # full_novel / short_story / script
@@ -84,8 +84,8 @@ class Chapter(Base):
     __tablename__ = "chapters"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    chapter_index = Column(Integer, nullable=False)  # 章节号，从1开始
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    chapter_index = Column(Integer, nullable=False, index=True)  # 章节号，从1开始
     title = Column(String(200), nullable=True)
     content = Column(Text, nullable=False)  # 章节完整内容
     word_count = Column(Integer, default=0)
@@ -108,7 +108,7 @@ class GenerationTask(Base):
     __tablename__ = "generation_tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     celery_task_id = Column(String(50), unique=True, nullable=False)
     status = Column(String(20), default="pending")  # pending / started / progress / success / failure
     progress = Column(Float, default=0.0)  # 0-1
@@ -127,12 +127,12 @@ class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     generation_task_id = Column(Integer, ForeignKey("generation_tasks.id", ondelete="SET NULL"), nullable=True, unique=True)
     parent_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
     run_kind = Column(String(30), nullable=False, default="generation")  # generation / regeneration / revision / publish
     trigger_source = Column(String(30), nullable=False, default="manual")  # manual / feedback / system / publish
-    status = Column(String(20), nullable=False, default="pending")  # pending / running / waiting_confirm / completed / failed / cancelled
+    status = Column(String(20), nullable=False, default="pending", index=True)  # pending / running / waiting_confirm / completed / failed / cancelled
     current_step_key = Column(String(50), nullable=True)
     current_chapter = Column(Integer, nullable=True)
     triggered_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -155,7 +155,7 @@ class WorkflowStepRun(Base):
     __tablename__ = "workflow_step_runs"
 
     id = Column(Integer, primary_key=True, index=True)
-    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False, index=True)
     step_key = Column(String(50), nullable=False)
     step_type = Column(String(30), nullable=False)
     status = Column(String(20), nullable=False, default="pending")
@@ -178,14 +178,14 @@ class Artifact(Base):
     __tablename__ = "artifacts"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
-    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
-    artifact_type = Column(String(50), nullable=False)
+    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True, index=True)
+    artifact_type = Column(String(50), nullable=False, index=True)
     scope = Column(String(20), nullable=False, default="project")  # project / chapter / step
     chapter_index = Column(Integer, nullable=True)
     version_number = Column(Integer, nullable=False, default=1)
-    is_current = Column(Boolean, default=True)
+    is_current = Column(Boolean, default=True, index=True)
     source = Column(String(30), nullable=False, default="system")  # system / user / agent
     content_text = Column(Text, nullable=True)
     content_json = Column(JSON, nullable=True)
@@ -201,16 +201,16 @@ class FeedbackItem(Base):
     __tablename__ = "feedback_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
-    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
+    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True, index=True)
     artifact_id = Column(Integer, ForeignKey("artifacts.id", ondelete="SET NULL"), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     feedback_scope = Column(String(20), nullable=False, default="chapter")  # project / plan / chapter / selection
     feedback_type = Column(String(30), nullable=False, default="user_note")  # user_rejection / user_note / editor_note
     action_type = Column(String(30), nullable=False, default="rewrite")  # rewrite / revise / polish / adjust_plan
     chapter_index = Column(Integer, nullable=True)
-    status = Column(String(20), nullable=False, default="open")  # open / applied / ignored
+    status = Column(String(20), nullable=False, default="open", index=True)  # open / applied / ignored
     content = Column(Text, nullable=False)
     feedback_metadata = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -228,7 +228,7 @@ class ChapterVersion(Base):
     __tablename__ = "chapter_versions"
 
     id = Column(Integer, primary_key=True, index=True)
-    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
+    chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False, index=True)
     version_number = Column(Integer, nullable=False)  # 从1开始递增
     content = Column(Text, nullable=False)
     word_count = Column(Integer, default=0)
@@ -242,8 +242,8 @@ class TokenUsage(Base):
     __tablename__ = "token_usage"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     agent_name = Column(String(30), nullable=False)
     model = Column(String(100), nullable=True)
     prompt_tokens = Column(Integer, default=0)
@@ -270,8 +270,8 @@ class ProjectCollaborator(Base):
     __tablename__ = "project_collaborators"
 
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(20), default="viewer")  # viewer / editor
     invited_at = Column(DateTime, default=datetime.datetime.utcnow)
     accepted_at = Column(DateTime, nullable=True)

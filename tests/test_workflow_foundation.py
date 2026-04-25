@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import json
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 import backend.api.projects as projects_api
 import backend.api.chapters as chapters_api
@@ -17,98 +12,20 @@ import tasks.export_tasks as export_tasks
 import tasks.writing_tasks as writing_tasks
 from backend.auth import set_user_api_key
 from utils.runtime_context import get_current_output_dir_optional, get_current_run_context_optional, set_current_output_dir
-from backend.database import Base, get_db
-from backend.deps import get_current_user
-from backend.main import app
 from backend.models import Artifact, Chapter, FeedbackItem, GenerationTask, Project, User, WorkflowRun, WorkflowStepRun
 from backend.chapter_sync import parse_chapter_file_content, sync_chapter_file_to_db
 from backend.task_status import ACTIVE_TASK_STATUSES, get_active_project_task
 from backend.workflow_service import create_artifact, create_feedback_item, create_generation_workflow_run, update_workflow_run_status
+from unittest.mock import patch
+from tests.base import BaseWorkflowTestCase
 
 
-class WorkflowFoundationTests(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.workspace = Path(self.temp_dir.name)
-        self.db_path = self.workspace / "test.db"
-        self.engine = create_engine(
-            f"sqlite:///{self.db_path}",
-            connect_args={"check_same_thread": False},
-        )
-        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        Base.metadata.create_all(bind=self.engine)
-
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_db] = self._override_get_db
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        app.dependency_overrides.clear()
-        set_current_output_dir(None)
-        self.engine.dispose()
-        self.temp_dir.cleanup()
-
-    def _override_get_db(self):
-        db = self.SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    def _set_current_user(self, user):
-        async def override_current_user():
-            return user
-
-        app.dependency_overrides[get_current_user] = override_current_user
-
-    def _create_user(self, username: str, email: str) -> User:
-        db = self.SessionLocal()
-        try:
-            user = User(
-                username=username,
-                email=email,
-                hashed_password="hashed",
-                is_active=True,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            db.expunge(user)
-            return user
-        finally:
-            db.close()
-
-    def _create_project(self, owner: User, name: str = "Project", file_path: str | None = None) -> Project:
-        db = self.SessionLocal()
-        try:
-            project = Project(
-                user_id=owner.id,
-                name=name,
-                description="demo",
-                content_type="full_novel",
-                status="draft",
-                file_path=file_path,
-                config={
-                    "novel_name": name,
-                    "core_requirement": "一个少年踏上修仙路",
-                    "chapter_word_count": 2000,
-                    "start_chapter": 1,
-                    "end_chapter": 3,
-                },
-            )
-            db.add(project)
-            db.commit()
-            db.refresh(project)
-            db.expunge(project)
-            return project
-        finally:
-            db.close()
-
+class WorkflowFoundationTests(BaseWorkflowTestCase):
     def test_trigger_generation_creates_workflow_run_and_project_snapshot_artifact(self):
         owner = self._create_user("workflow_owner", "workflow_owner@example.com")
         project_dir = self.workspace / "workflow-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Workflow Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Workflow Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         dispatched_task_ids = []
@@ -160,7 +77,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_active_project_task_helper_includes_waiting_confirm_and_prefers_latest(self):
         owner = self._create_user("active_helper_owner", "active_helper_owner@example.com")
-        project = self._create_project(owner, name="Active Helper Novel")
+        project = self._create_project_full(owner, name="Active Helper Novel")
 
         db = self.SessionLocal()
         try:
@@ -194,7 +111,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_create_artifact_versions_project_artifacts_and_keeps_single_current(self):
         owner = self._create_user("artifact_owner", "artifact_owner@example.com")
-        project = self._create_project(owner, name="Artifact Novel")
+        project = self._create_project_full(owner, name="Artifact Novel")
 
         db = self.SessionLocal()
         try:
@@ -235,7 +152,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_create_artifact_versions_chapter_artifacts_independently(self):
         owner = self._create_user("chapter_artifact_owner", "chapter_artifact_owner@example.com")
-        project = self._create_project(owner, name="Chapter Artifact Novel")
+        project = self._create_project_full(owner, name="Chapter Artifact Novel")
 
         db = self.SessionLocal()
         try:
@@ -282,7 +199,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_create_artifact_rejects_unknown_scope_and_source(self):
         owner = self._create_user("invalid_artifact_owner", "invalid_artifact_owner@example.com")
-        project = self._create_project(owner, name="Invalid Artifact Novel")
+        project = self._create_project_full(owner, name="Invalid Artifact Novel")
 
         db = self.SessionLocal()
         try:
@@ -308,7 +225,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("feedback_owner", "feedback_owner@example.com")
         project_dir = self.workspace / "feedback-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Feedback Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Feedback Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -396,7 +313,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_create_feedback_item_supersedes_previous_open_feedback_for_same_target(self):
         owner = self._create_user("supersede_owner", "supersede_owner@example.com")
-        project = self._create_project(owner, name="Supersede Novel")
+        project = self._create_project_full(owner, name="Supersede Novel")
 
         db = self.SessionLocal()
         try:
@@ -442,7 +359,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("sync_owner", "sync_owner@example.com")
         project_dir = self.workspace / "sync-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Sync Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Sync Novel", file_path=str(project_dir))
         chapter_file = project_dir / "chapters" / "chapter_1.txt"
         chapter_file.parent.mkdir(parents=True, exist_ok=True)
         chapter_file.write_text("第1章 初见\n\n山雨欲来。\n\n主角登场。", encoding="utf-8")
@@ -477,7 +394,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_update_workflow_run_status_tracks_lifecycle_and_completion(self):
         owner = self._create_user("status_owner", "status_owner@example.com")
-        project = self._create_project(owner, name="Status Novel")
+        project = self._create_project_full(owner, name="Status Novel")
 
         db = self.SessionLocal()
         try:
@@ -590,7 +507,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("waiting_owner", "waiting_owner@example.com")
         project_dir = self.workspace / "waiting-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Waiting Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Waiting Novel", file_path=str(project_dir))
 
         db = self.SessionLocal()
         try:
@@ -670,7 +587,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         chapters_dir = project_dir / "chapters"
         chapters_dir.mkdir()
         (chapters_dir / "chapter_1.txt").write_text("第1章 标题\n\n章节内容", encoding="utf-8")
-        project = self._create_project(owner, name="Success Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Success Novel", file_path=str(project_dir))
         custom_api_key = "abcd1234efgh5678"
 
         db = self.SessionLocal()
@@ -828,7 +745,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("cancel_owner", "cancel_owner@example.com")
         project_dir = self.workspace / "cancel-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Cancel Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Cancel Novel", file_path=str(project_dir))
 
         db = self.SessionLocal()
         try:
@@ -904,7 +821,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("active_generation_owner", "active_generation_owner@example.com")
         project_dir = self.workspace / "active-generation-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Active Generation Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Active Generation Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -930,7 +847,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("active_export_owner", "active_export_owner@example.com")
         project_dir = self.workspace / "active-export-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Active Export Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Active Export Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -956,7 +873,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("export_dispatch_owner", "export_dispatch_owner@example.com")
         project_dir = self.workspace / "export-dispatch-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Export Dispatch Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Export Dispatch Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1002,7 +919,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("active_regen_owner", "active_regen_owner@example.com")
         project_dir = self.workspace / "active-regen-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Active Regen Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Active Regen Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1038,7 +955,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("regen_dispatch_owner", "regen_dispatch_owner@example.com")
         project_dir = self.workspace / "regen-dispatch-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Regen Dispatch Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Regen Dispatch Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1082,7 +999,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_clean_stuck_tasks_marks_task_and_workflow_failed(self):
         owner = self._create_user("clean_stuck_owner", "clean_stuck_owner@example.com")
-        project = self._create_project(owner, name="Clean Stuck Novel")
+        project = self._create_project_full(owner, name="Clean Stuck Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1145,7 +1062,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         chapters_dir = project_dir / "chapters"
         chapters_dir.mkdir(parents=True)
         (chapters_dir / "chapter_1.txt").write_text("旧章节", encoding="utf-8")
-        project = self._create_project(owner, name="Reset Cancel Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Reset Cancel Novel", file_path=str(project_dir))
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1215,7 +1132,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_task_status_endpoint_includes_workflow_run_steps_and_feedback(self):
         owner = self._create_user("status_api_owner", "status_api_owner@example.com")
-        project = self._create_project(owner, name="Status API Novel")
+        project = self._create_project_full(owner, name="Status API Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1318,7 +1235,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_project_detail_includes_current_generation_task_workflow_summary(self):
         owner = self._create_user("project_api_owner", "project_api_owner@example.com")
-        project = self._create_project(owner, name="Project API Novel")
+        project = self._create_project_full(owner, name="Project API Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1362,7 +1279,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_workflow_runs_endpoint_returns_recent_runs_with_steps_and_feedback(self):
         owner = self._create_user("workflow_runs_owner", "workflow_runs_owner@example.com")
-        project = self._create_project(owner, name="Workflow Runs Novel")
+        project = self._create_project_full(owner, name="Workflow Runs Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1452,7 +1369,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_artifacts_endpoint_filters_by_scope_current_only_and_workflow_run(self):
         owner = self._create_user("artifact_api_owner", "artifact_api_owner@example.com")
-        project = self._create_project(owner, name="Artifact API Novel")
+        project = self._create_project_full(owner, name="Artifact API Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1573,7 +1490,7 @@ class WorkflowFoundationTests(unittest.TestCase):
 
     def test_artifact_detail_endpoint_returns_full_content(self):
         owner = self._create_user("artifact_detail_owner", "artifact_detail_owner@example.com")
-        project = self._create_project(owner, name="Artifact Detail Novel")
+        project = self._create_project_full(owner, name="Artifact Detail Novel")
         self._set_current_user(owner)
 
         db = self.SessionLocal()
@@ -1611,7 +1528,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("materialize_owner", "materialize_owner@example.com")
         project_dir = self.workspace / "materialize-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Materialize Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Materialize Novel", file_path=str(project_dir))
 
         db = self.SessionLocal()
         try:
@@ -1681,7 +1598,7 @@ class WorkflowFoundationTests(unittest.TestCase):
         owner = self._create_user("applied_owner", "applied_owner@example.com")
         project_dir = self.workspace / "applied-project"
         project_dir.mkdir()
-        project = self._create_project(owner, name="Applied Novel", file_path=str(project_dir))
+        project = self._create_project_full(owner, name="Applied Novel", file_path=str(project_dir))
         feedback_file = project_dir / "feedback_2.txt"
         feedback_file.write_text("这是陈旧的反馈文件内容。", encoding="utf-8")
 
@@ -1755,6 +1672,43 @@ class WorkflowFoundationTests(unittest.TestCase):
             self.assertEqual(db_run.run_metadata["applied_feedback_item_ids"], [feedback_id])
         finally:
             db.close()
+
+
+class RateLimiterIntegrationTests(BaseWorkflowTestCase):
+    def test_rate_limiter_module_exists_and_has_expected_interface(self):
+        from backend.rate_limiter import RateLimiter, rate_limiter, limit_requests, get_ip_from_request
+
+        self.assertIsInstance(rate_limiter, RateLimiter)
+        self.assertTrue(hasattr(rate_limiter, 'check'))
+        self.assertTrue(callable(limit_requests(10)))
+
+    def test_rate_limiter_basic_functionality(self):
+        from backend.rate_limiter import RateLimiter
+
+        limiter = RateLimiter()
+        self.assertTrue(limiter.check("test-ip", 3, 60))
+        self.assertTrue(limiter.check("test-ip", 3, 60))
+        self.assertTrue(limiter.check("test-ip", 3, 60))
+        self.assertFalse(limiter.check("test-ip", 3, 60))
+
+    def test_rate_limiter_respects_different_keys(self):
+        from backend.rate_limiter import RateLimiter
+
+        limiter = RateLimiter()
+        self.assertTrue(limiter.check("ip-1", 1, 60))
+        self.assertFalse(limiter.check("ip-1", 1, 60))
+        self.assertTrue(limiter.check("ip-2", 1, 60))
+
+    def test_rate_limiter_is_instantiated_in_module(self):
+        import backend.rate_limiter as rl_module
+        self.assertIsNotNone(rl_module.rate_limiter)
+
+    def test_rate_limiter_is_attached_to_fastapi_app(self):
+        from backend.main import app
+        self.assertTrue(hasattr(app, 'rate_limiter'))
+        self.assertIsNotNone(app.rate_limiter)
+        from backend.rate_limiter import RateLimiter
+        self.assertIsInstance(app.rate_limiter, RateLimiter)
 
 
 if __name__ == "__main__":

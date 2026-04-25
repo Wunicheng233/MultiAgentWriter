@@ -10,6 +10,7 @@ import hashlib
 import re
 from pathlib import Path
 import config
+from config import VECTOR_CHUNK_SIZE
 from utils.logger import logger
 from utils.runtime_context import (
     get_current_output_dir,
@@ -186,12 +187,9 @@ def reset_current_db():
         client.delete_collection(name=_get_current_chapter_collection_name())
         client.delete_collection(name=_get_current_setting_collection_name())
         logger.info("✅ 当前小说向量数据库已重置")
-    except Exception:
+    except Exception as e:
         # collection不存在，不用删
-        pass
-
-
-from config import VECTOR_CHUNK_SIZE
+        logger.error(f"Vector DB 操作失败: {e}", exc_info=True)
 
 
 # ===================== 标准化写入函数 =====================

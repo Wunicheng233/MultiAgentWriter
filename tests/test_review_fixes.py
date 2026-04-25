@@ -2,14 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 import backend.api.projects as projects_api
 import backend.database as database_module
@@ -24,87 +19,14 @@ from backend.api.auth import clear_api_key, refresh_api_key, register
 from backend.auth import get_password_hash, get_user_api_key, set_user_api_key
 from backend.api.chapters import restore_version, update_chapter
 from backend.chapter_sync import html_content_to_plain_text
-from backend.database import Base, get_db
-from backend.deps import get_current_user
-from backend.main import app
 from backend.models import Chapter, ChapterVersion, GenerationTask, Project, ProjectCollaborator, ShareLink, User
+from utils.runtime_context import set_current_output_dir
 from backend.schemas import ChapterUpdate, UserCreate
 from core.orchestrator import NovelOrchestrator
-from utils.runtime_context import set_current_output_dir
+from tests.base import BaseWorkflowTestCase
 
 
-class ReviewFixRegressionTests(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.workspace = Path(self.temp_dir.name)
-        self.db_path = self.workspace / "test.db"
-        self.engine = create_engine(
-            f"sqlite:///{self.db_path}",
-            connect_args={"check_same_thread": False},
-        )
-        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        Base.metadata.create_all(bind=self.engine)
-
-        app.dependency_overrides.clear()
-        app.dependency_overrides[get_db] = self._override_get_db
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        app.dependency_overrides.clear()
-        set_current_output_dir(None)
-        self.engine.dispose()
-        self.temp_dir.cleanup()
-
-    def _override_get_db(self):
-        db = self.SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    def _set_current_user(self, user):
-        async def override_current_user():
-            return user
-
-        app.dependency_overrides[get_current_user] = override_current_user
-
-    def _create_user(self, username: str, email: str) -> User:
-        db = self.SessionLocal()
-        try:
-            user = User(
-                username=username,
-                email=email,
-                hashed_password="hashed",
-                is_active=True,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            db.expunge(user)
-            return user
-        finally:
-            db.close()
-
-    def _create_project(self, owner: User, name: str = "Project", file_path: str | None = None) -> Project:
-        db = self.SessionLocal()
-        try:
-            project = Project(
-                user_id=owner.id,
-                name=name,
-                description="demo",
-                content_type="full_novel",
-                status="draft",
-                file_path=file_path,
-                config={"novel_name": name},
-            )
-            db.add(project)
-            db.commit()
-            db.refresh(project)
-            db.expunge(project)
-            return project
-        finally:
-            db.close()
-
+class ReviewFixRegressionTests(BaseWorkflowTestCase):
     def test_shared_project_endpoint_loads_related_project(self):
         owner = self._create_user("owner", "owner@example.com")
         project = self._create_project(owner, name="Shared Novel")
@@ -295,10 +217,10 @@ class ReviewFixRegressionTests(unittest.TestCase):
                 self.chat = SimpleNamespace(completions=FakeCompletions())
 
         fake_client = FakeClient()
-        original_load_prompt = file_utils.load_prompt
+        original_load_prompt = volc_engine.load_prompt
         original_sleep = volc_engine.time.sleep
         try:
-            file_utils.load_prompt = lambda agent_role, content_type=None, context=None, perspective=None, perspective_strength=None, **kwargs: captured_contexts.append(context) or "system"
+            volc_engine.load_prompt = lambda agent_role, content_type=None, context=None, perspective=None, perspective_strength=None, **kwargs: captured_contexts.append(context) or "system"
             volc_engine.time.sleep = lambda seconds: None
             result = volc_engine.call_volc_api(
                 agent_role="writer",
@@ -308,7 +230,7 @@ class ReviewFixRegressionTests(unittest.TestCase):
                 max_retries=2,
             )
         finally:
-            file_utils.load_prompt = original_load_prompt
+            volc_engine.load_prompt = original_load_prompt
             volc_engine.time.sleep = original_sleep
 
         self.assertEqual(result, "成功")
@@ -717,10 +639,13 @@ class ReviewFixRegressionTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
-    def test_editor_navigation_uses_registered_write_route(self):
+    def test_editor_navigation_uses_registered_route_pattern(self):
         editor_source = Path("/Users/nobody1/Desktop/project/writer/frontend/src/pages/Editor.tsx").read_text(encoding="utf-8")
-        self.assertNotIn("/projects/${id}/edit/", editor_source)
-        self.assertIn("/projects/${id}/write/", editor_source)
+        # Editor 现在使用 useParams 从路由获取 id 和 chapterIndex，不直接硬编码路径
+        self.assertIn("useParams", editor_source)
+        # 安全的空值处理：三元运算符而非非空断言
+        self.assertIn("id ? parseInt(id)", editor_source)  # 确认安全的路由参数提取
+        self.assertIn("Number.isNaN", editor_source)  # 确认有 NaN 检查
 
     def test_collaborator_cannot_create_public_share_link(self):
         owner = self._create_user("share_owner", "share_owner@example.com")

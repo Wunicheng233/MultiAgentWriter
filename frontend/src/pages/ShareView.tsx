@@ -22,12 +22,13 @@ export const ShareView: React.FC = () => {
   const { data: project, isLoading, error } = useQuery({
     queryKey: ['shared-project', token],
     queryFn: () => getSharedProject(token!),
+    enabled: !!token,
   });
 
   const { data: chapter } = useQuery({
     queryKey: ['shared-chapter', token, currentChapterIndex],
-    queryFn: () => currentChapterIndex !== null ? getSharedChapter(token!, currentChapterIndex) : null,
-    enabled: currentChapterIndex !== null,
+    queryFn: () => currentChapterIndex !== null && token ? getSharedChapter(token, currentChapterIndex) : null,
+    enabled: currentChapterIndex !== null && !!token,
   });
 
   // Initialize
