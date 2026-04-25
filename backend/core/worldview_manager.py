@@ -2,7 +2,7 @@ import copy
 import json
 from backend.utils.logger import logger
 from backend.utils.runtime_context import get_current_output_dir_optional
-import config
+import backend.config as config
 
 # ===================== 世界观管控核心类 =====================
 # 每本小说独立存储世界观状态，放在当前小说输出文件夹下

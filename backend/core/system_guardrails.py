@@ -13,7 +13,7 @@ from typing import List, Optional, Dict
 from pathlib import Path
 
 from backend.utils.logger import logger
-from config import ROOT_DIR
+from backend.config import ROOT_DIR
 
 
 # 默认配置

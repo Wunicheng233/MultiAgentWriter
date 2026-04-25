@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import config
+import backend.config as config
 from backend.core.worldview_manager import WorldviewManager
 from backend.utils import vector_db
 from backend.utils.runtime_context import (

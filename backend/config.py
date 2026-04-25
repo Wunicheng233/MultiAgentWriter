@@ -9,14 +9,14 @@ from datetime import datetime
 
 # 尝试导入新配置中心，如果可用就使用它
 try:
-    from core.config import settings
+    from backend.core.config import settings
     USING_NEW_CONFIG = True
 except ImportError:
     USING_NEW_CONFIG = False
 
 # 自动加载 .env 文件（如果存在）
 # 这样你只需要把 API Keys 写到 .env 文件，程序自动读取
-ENV_FILE = Path(__file__).parent / '.env'
+ENV_FILE = Path(__file__).parent.parent / '.env'
 if ENV_FILE.exists():
     with open(ENV_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -149,7 +149,7 @@ else:
     VECTOR_SEARCH_TOP_K_CHAPTERS = 2
     VECTOR_SEARCH_TOP_K_SETTINGS = 1
     STYLE_REFERENCE_TOP_K = 2
-    ROOT_DIR = Path(__file__).parent
+    ROOT_DIR = Path(__file__).parent.parent
     PROMPTS_DIR = ROOT_DIR / "prompts"
     PROMPTS_DIR.mkdir(exist_ok=True)
     USER_REQUIREMENTS_FILE = ROOT_DIR / "user_requirements.yaml"

@@ -1,7 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
-from config import PROMPTS_DIR, OUTPUTS_ROOT
+from backend.config import PROMPTS_DIR, OUTPUTS_ROOT
 from backend.utils.logger import logger
 from backend.utils.runtime_context import get_current_output_dir, set_current_output_dir
 

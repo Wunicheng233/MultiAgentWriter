@@ -1,6 +1,6 @@
 import yaml
 from pathlib import Path
-from config import USER_REQUIREMENTS_FILE
+from backend.config import USER_REQUIREMENTS_FILE
 from backend.utils.logger import logger
 
 def load_user_requirements() -> dict:

@@ -1,6 +1,6 @@
 import logging
 import sys
-from config import LOG_FILE
+from backend.config import LOG_FILE
 
 def setup_logger(name: str = "novel_system") -> logging.Logger:
     """

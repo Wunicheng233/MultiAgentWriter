@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterator
 
-import config
+import backend.config as config
 
 
 _current_output_dir: ContextVar[Path | None] = ContextVar("current_output_dir", default=None)

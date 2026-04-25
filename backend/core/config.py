@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 # 项目根目录
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 
 
 class Settings(BaseSettings):

@@ -9,8 +9,8 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
-import config
-from config import VECTOR_CHUNK_SIZE
+import backend.config as config
+from backend.config import VECTOR_CHUNK_SIZE
 from backend.utils.logger import logger
 from backend.utils.runtime_context import (
     get_current_output_dir,

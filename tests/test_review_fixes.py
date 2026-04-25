@@ -10,7 +10,7 @@ import backend.api.projects as projects_api
 import backend.database as database_module
 import backend.deps as deps
 import agents.writer_agent as writer_agent
-import config
+import backend.config as config
 import backend.core.orchestrator as orchestrator_module
 import backend.utils.file_utils as file_utils
 import backend.utils.volc_engine as volc_engine

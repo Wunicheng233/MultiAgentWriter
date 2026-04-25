@@ -9,7 +9,7 @@ try:
     from backend.core.config import settings
     USE_NEW_CONFIG = True
 except ImportError:
-    from config import API_KEYS, BASE_URL, MODELS, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, TEMPERATURES, WRITER_MAX_TOKENS
+    from backend.config import API_KEYS, BASE_URL, MODELS, DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, TEMPERATURES, WRITER_MAX_TOKENS
     USE_NEW_CONFIG = False
 
 # ========== 优化：全局客户端缓存，每个Agent角色复用连接 ==========
@@ -43,7 +43,7 @@ def _get_client(agent_role: str) -> openai.OpenAI:
                 api_key = settings.get_api_key_for_agent(agent_role)
                 base_url = settings.base_url
             else:
-                from config import API_KEYS, BASE_URL
+                from backend.config import API_KEYS, BASE_URL
                 api_key = API_KEYS.get(agent_role, API_KEYS.get("default", ""))
                 base_url = BASE_URL
 
