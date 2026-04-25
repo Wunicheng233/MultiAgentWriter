@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.database import Base
 from backend.models import Chapter, Project, User
-from services.export_service import ExportService
+from backend.services.export_service import ExportService
 
 
 class ExportServiceSecurityTests(unittest.TestCase):

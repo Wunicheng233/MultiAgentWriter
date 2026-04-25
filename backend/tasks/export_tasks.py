@@ -10,7 +10,7 @@ from datetime import datetime
 
 from backend.database import SessionLocal
 from backend.models import GenerationTask
-from services.export_service import ExportService
+from backend.services.export_service import ExportService
 
 logger = get_task_logger(__name__)
 
