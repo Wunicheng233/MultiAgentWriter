@@ -1,70 +1,67 @@
-/* 导入 Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400&family=Inter:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Crimson+Pro:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 阅读器 CSS 变量 - 主题支持 */
+/* Theme Variables */
 :root {
-  --reader-bg: #faf7f2;
-  --reader-text: #3a2c1f;
-  --reader-border: #e0e0e0;
-  --reader-secondary: #6b6b6b;
-  --reader-font-family: 'Crimson Pro', Georgia, serif;
+  /* Theme 1: Warm Parchment (DEFAULT) */
+  --bg-primary: #faf7f2;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: rgba(255, 255, 255, 0.6);
+  --text-primary: #3a2c1f;
+  --text-body: #4a3f35;
+  --text-secondary: #7a6f62;
+  --text-muted: #a69a8d;
+  --accent-primary: #5b7f6e;
+  --accent-warm: #c06b4e;
+  --accent-soft: #a8685c;
+  --accent-gold: #a38b5a;
+  --border-default: rgba(91, 127, 110, 0.12);
+  --border-strong: rgba(91, 127, 110, 0.2);
+  --border-subtle: #e8ddd0;
+  --shadow-subtle: 0 2px 8px rgba(60, 40, 20, 0.04);
+  --shadow-default: 0 4px 16px rgba(60, 40, 20, 0.06);
+  --shadow-elevated: 0 8px 32px rgba(60, 40, 20, 0.1);
 }
 
-.theme-parchment {
-  --reader-bg: #faf7f2;
-  --reader-text: #3a2c1f;
-  --reader-border: #d4cdc4;
-  --reader-secondary: #6b6b6b;
+/* Theme 2: Clean Light */
+[data-theme="clean-light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --text-primary: #1a1a1a;
+  --text-body: #333333;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent-primary: #4f76f3;
+  --border-default: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.1);
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-default: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-.theme-white {
-  --reader-bg: #ffffff;
-  --reader-text: #333333;
-  --reader-border: #e5e7eb;
-  --reader-secondary: #6b7280;
+/* Theme 3: Deep Dark */
+[data-theme="deep-dark"] {
+  --bg-primary: #1a1d23;
+  --bg-secondary: #22272e;
+  --bg-tertiary: #2d333b;
+  --text-primary: #e6edf3;
+  --text-body: #adbac7;
+  --text-secondary: #768390;
+  --text-muted: #545d68;
+  --accent-primary: #6494ed;
+  --border-default: rgba(100, 148, 237, 0.12);
+  --border-strong: rgba(100, 148, 237, 0.2);
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-default: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.theme-dark {
-  --reader-bg: #1a1a1a;
-  --reader-text: #e0e0e0;
-  --reader-border: #333333;
-  --reader-secondary: #999999;
-}
-
-.theme-green {
-  --reader-bg: #e8ede0;
-  --reader-text: #3a4a3a;
-  --reader-border: #cbd5c0;
-  --reader-secondary: #5a6a5a;
-}
-
-/* 全局基础样式 */
+/* Global Base Styles */
 @layer base {
-  body {
-    @apply bg-parchment font-sans text-body;
-  }
-
-  /* 叙事内容使用 Crimson Pro */
-  .prose-novel {
-    @apply font-serif text-body text-[16px] leading-relaxed;
-    line-height: 1.6;
-  }
-  .prose-novel p {
-    @apply mb-4;
-  }
-  .prose-novel p:last-child {
-    @apply mb-0;
-  }
-
-  /* 标题使用 Crimson Pro 字重 400 */
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-serif font-normal text-inkwell;
-  }
-
   * {
     box-sizing: border-box;
   }
@@ -73,20 +70,20 @@
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    background-color: var(--bg-primary);
+    color: var(--text-body);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  /* Serif font for narrative content */
+  .font-serif {
+    font-family: 'Crimson Pro', Georgia, serif;
   }
 }
 
-/* 自定义工具类 */
+/* Custom Utilities */
 @layer utilities {
   .content-auto {
     content-visibility: auto;
-  }
-
-  .paper-card {
-    @apply backdrop-blur-[8px] rounded-comfortable;
-  }
-
-  .paper-card-hover {
-    @apply hover:shadow-elevated hover:border-border/80 transition-shadow;
   }
 }
