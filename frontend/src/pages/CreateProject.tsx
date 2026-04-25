@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { Layout } from '../components/Layout'
+
 import { Card } from '../components/Card'
 import { Input, Textarea } from '../components/Input'
 import { Button } from '../components/Button'
@@ -146,7 +146,7 @@ export const CreateProject: React.FC = () => {
   }
 
   return (
-    <Layout>
+    
       <div className="mx-auto max-w-content space-y-6">
         <Card className="border-sage/20 bg-[linear-gradient(135deg,rgba(91,127,110,0.12),rgba(250,247,242,0.96),rgba(163,139,90,0.1))]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -155,7 +155,7 @@ export const CreateProject: React.FC = () => {
                 <Link to="/">
                   <Button variant="secondary" size="sm">返回书架</Button>
                 </Link>
-                <span className="rounded-pill border border-sage/20 bg-white/75 px-3 py-1 text-sm text-secondary">
+                <span className="rounded-pill border border-sage/20 bg-white/75 px-3 py-1 text-sm text-[var(--text-secondary)]">
                   Create Brief
                 </span>
               </div>
@@ -166,9 +166,9 @@ export const CreateProject: React.FC = () => {
             </div>
 
             <div className="w-full max-w-md rounded-comfortable border border-white/70 bg-white/75 p-5 shadow-standard backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Current Step</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Current Step</p>
               <h2 className="mt-2 text-2xl">{currentStepMeta.title}</h2>
-              <p className="mt-2 text-secondary">{currentStepMeta.description}</p>
+              <p className="mt-2 text-[var(--text-secondary)]">{currentStepMeta.description}</p>
               <div className="mt-5">
                 <ProgressBar progress={progress} message={`步骤 ${currentStep}/${steps.length}: ${currentStepMeta.title}`} />
               </div>
@@ -187,7 +187,7 @@ export const CreateProject: React.FC = () => {
                   className={`rounded-pill px-4 py-2 text-sm transition-colors ${
                     currentStep === step.id
                       ? 'bg-sage text-parchment'
-                      : 'border border-border bg-parchment/60 text-secondary hover:border-sage/30 hover:text-inkwell'
+                      : 'border border-border bg-parchment/60 text-[var(--text-secondary)] hover:border-sage/30 hover:text-inkwell'
                   }`}
                 >
                   {step.id}. {step.title}
@@ -199,7 +199,7 @@ export const CreateProject: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h2 className="text-2xl">先定义作品外壳</h2>
-                  <p className="mt-2 text-secondary">
+                  <p className="mt-2 text-[var(--text-secondary)]">
                     这一页决定项目在系统里的身份。比赛演示时，推荐用一个清晰、有记忆点的名字和一句简介。
                   </p>
                 </div>
@@ -227,7 +227,7 @@ export const CreateProject: React.FC = () => {
                         className={`cursor-pointer rounded-comfortable border p-4 transition-colors ${
                           formData.content_type === type.value
                             ? 'border-sage bg-sage/10 text-inkwell'
-                            : 'border-border bg-parchment/40 text-secondary hover:border-sage/30'
+                            : 'border-border bg-parchment/40 text-[var(--text-secondary)] hover:border-sage/30'
                         }`}
                       >
                         <input
@@ -251,7 +251,7 @@ export const CreateProject: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h2 className="text-2xl">把故事 brief 交给系统</h2>
-                  <p className="mt-2 text-secondary">
+                  <p className="mt-2 text-[var(--text-secondary)]">
                     这一页最重要。你写下的是多 Agent 后续共同使用的创作上下文，不只是给单次生成的一段 prompt。
                   </p>
                 </div>
@@ -303,8 +303,8 @@ export const CreateProject: React.FC = () => {
                 />
 
                 <div className="rounded-comfortable border border-border bg-parchment/60 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-secondary">Prompting Guide</p>
-                  <div className="mt-3 space-y-2 text-sm text-secondary">
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Prompting Guide</p>
+                  <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
                     {briefPrompts.map(prompt => (
                       <p key={prompt}>{prompt}</p>
                     ))}
@@ -317,7 +317,7 @@ export const CreateProject: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h2 className="text-2xl">选择比赛版协作方式</h2>
-                  <p className="mt-2 text-secondary">
+                  <p className="mt-2 text-[var(--text-secondary)]">
                     这一页决定你是追求速度、可控性，还是更强的人在环路展示感。你可以随时在项目创建后再调整。
                   </p>
                 </div>
@@ -389,9 +389,9 @@ export const CreateProject: React.FC = () => {
                 </div>
 
                 <div className="rounded-comfortable border border-sage/20 bg-sage/8 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-secondary">Selected Mode</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Selected Mode</p>
                   <h3 className="mt-2 text-xl">{getModeLabel(formData)}</h3>
-                  <p className="mt-2 text-secondary">{getModeDescription(formData)}</p>
+                  <p className="mt-2 text-[var(--text-secondary)]">{getModeDescription(formData)}</p>
                 </div>
               </div>
             )}
@@ -400,41 +400,41 @@ export const CreateProject: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h2 className="text-2xl">确认并启动项目</h2>
-                  <p className="mt-2 text-secondary">
+                  <p className="mt-2 text-[var(--text-secondary)]">
                     创建后会直接进入项目概览页。那里已经被收口成比赛版总控台，可以立刻开始生成和展示进度。
                   </p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">项目名称</p>
+                    <p className="text-[var(--text-secondary)]">项目名称</p>
                     <p className="mt-1 text-body">{formData.name || '未填写'}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">内容类型</p>
+                    <p className="text-[var(--text-secondary)]">内容类型</p>
                     <p className="mt-1 text-body">{selectedContentType?.label || '未选择'}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">章节范围</p>
+                    <p className="text-[var(--text-secondary)]">章节范围</p>
                     <p className="mt-1 text-body">{formData.start_chapter} - {formData.end_chapter}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">协作模式</p>
+                    <p className="text-[var(--text-secondary)]">协作模式</p>
                     <p className="mt-1 text-body">{getModeLabel(formData)}</p>
                   </div>
                 </div>
 
                 <div className="rounded-comfortable border border-border bg-white/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Requirement</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Core Requirement</p>
                   <div className="mt-3 space-y-3 text-sm text-body">
-                    <p><span className="text-secondary">小说名称：</span>{formData.novel_name || formData.name || '未填写'}</p>
-                    <p><span className="text-secondary">题材：</span>{formData.genre || '未填写'}</p>
-                    <p><span className="text-secondary">核心钩子：</span>{formData.core_hook || '未填写'}</p>
-                    <p><span className="text-secondary">目标总字数：</span>{formData.total_words || '未填写'}</p>
-                    <p><span className="text-secondary">发布平台：</span>{formData.target_platform || '未填写'}</p>
+                    <p><span className="text-[var(--text-secondary)]">小说名称：</span>{formData.novel_name || formData.name || '未填写'}</p>
+                    <p><span className="text-[var(--text-secondary)]">题材：</span>{formData.genre || '未填写'}</p>
+                    <p><span className="text-[var(--text-secondary)]">核心钩子：</span>{formData.core_hook || '未填写'}</p>
+                    <p><span className="text-[var(--text-secondary)]">目标总字数：</span>{formData.total_words || '未填写'}</p>
+                    <p><span className="text-[var(--text-secondary)]">发布平台：</span>{formData.target_platform || '未填写'}</p>
                     {formData.core_requirement && (
                       <div>
-                        <p className="text-secondary">创作需求：</p>
+                        <p className="text-[var(--text-secondary)]">创作需求：</p>
                         <p className="mt-2 whitespace-pre-line">{formData.core_requirement}</p>
                       </div>
                     )}
@@ -454,7 +454,7 @@ export const CreateProject: React.FC = () => {
 
               <div className="flex flex-col items-end gap-2">
                 {stepBlockedReason && currentStep < steps.length && (
-                  <p className="text-sm text-secondary">{stepBlockedReason}</p>
+                  <p className="text-sm text-[var(--text-secondary)]">{stepBlockedReason}</p>
                 )}
                 {currentStep < steps.length ? (
                   <Button variant="primary" onClick={nextStep} disabled={isPending || !!stepBlockedReason}>
@@ -471,40 +471,40 @@ export const CreateProject: React.FC = () => {
 
           <div className="space-y-6">
             <Card>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Live Summary</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Live Summary</p>
               <h2 className="mt-2 text-2xl">实时项目摘要</h2>
 
               <div className="mt-5 space-y-3">
                 <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                  <p className="text-secondary">作品名称</p>
+                  <p className="text-[var(--text-secondary)]">作品名称</p>
                   <p className="mt-1 text-body">{formData.name || '等待填写'}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                  <p className="text-secondary">内容类型</p>
+                  <p className="text-[var(--text-secondary)]">内容类型</p>
                   <p className="mt-1 text-body">{selectedContentType?.label || '等待选择'}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                  <p className="text-secondary">核心钩子</p>
+                  <p className="text-[var(--text-secondary)]">核心钩子</p>
                   <p className="mt-1 text-body">{formData.core_hook || '等待填写'}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                  <p className="text-secondary">生成范围</p>
+                  <p className="text-[var(--text-secondary)]">生成范围</p>
                   <p className="mt-1 text-body">
                     {formData.start_chapter} - {formData.end_chapter} 章，共 {targetChapters} 章
                   </p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                  <p className="text-secondary">协作模式</p>
+                  <p className="text-[var(--text-secondary)]">协作模式</p>
                   <p className="mt-1 text-body">{getModeLabel(formData)}</p>
-                  <p className="mt-2 text-sm text-secondary">{getModeDescription(formData)}</p>
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">{getModeDescription(formData)}</p>
                 </div>
               </div>
             </Card>
 
             <Card>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">What Happens Next</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">What Happens Next</p>
               <h2 className="mt-2 text-2xl">创建后会发生什么</h2>
-              <div className="mt-5 space-y-3 text-sm text-secondary">
+              <div className="mt-5 space-y-3 text-sm text-[var(--text-secondary)]">
                 <p>1. Planner 会先把你的需求拆成设定圣经和分章大纲。</p>
                 <p>2. Writer 逐章生成正文，Guardrails 和 Critic 自动做首轮质量控制。</p>
                 <p>3. Revise 在需要时根据问题清单修订章节。</p>
@@ -514,7 +514,7 @@ export const CreateProject: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    
   )
 }
 

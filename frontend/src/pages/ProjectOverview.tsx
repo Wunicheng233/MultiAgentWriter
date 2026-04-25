@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { Layout } from '../components/Layout'
+
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import type { BadgeVariant } from '../components/Badge'
@@ -522,17 +522,17 @@ export const ProjectOverview: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Layout>
-        <p className="text-secondary">加载中...</p>
-      </Layout>
+      
+        <p className="text-[var(--text-secondary)]">加载中...</p>
+      
     )
   }
 
   if (!data) {
     return (
-      <Layout>
-        <p className="text-secondary">项目不存在</p>
-      </Layout>
+      
+        <p className="text-[var(--text-secondary)]">项目不存在</p>
+      
     )
   }
 
@@ -550,7 +550,7 @@ export const ProjectOverview: React.FC = () => {
   const isOwner = !!data && !!user && data.user_id === user.id
 
   return (
-    <Layout>
+    
       <div className="mx-auto max-w-content space-y-8">
         <Card variant="elevated" className="overflow-hidden">
           <div className="flex flex-col gap-10 p-8 lg:flex-row lg:items-center lg:justify-between">
@@ -573,7 +573,7 @@ export const ProjectOverview: React.FC = () => {
                 {data.description}
               </p>
 
-              <div className="mt-5 flex flex-wrap gap-4 text-sm text-secondary">
+              <div className="mt-5 flex flex-wrap gap-4 text-sm text-[var(--text-secondary)]">
                 <span>目标章节 {targetStart} - {targetEnd}</span>
                 <span>每章约 {config?.chapter_word_count ?? 2000} 字</span>
                 {config?.genre && <span>{config.genre}</span>}
@@ -590,7 +590,7 @@ export const ProjectOverview: React.FC = () => {
             <div className="w-full max-w-lg rounded-2xl border border-sage/15 bg-sage/5 p-6">
               <p className="text-xs uppercase tracking-[0.25em] text-sage">Current Focus</p>
               <h2 className="mt-3 text-xl">{runSummary.headline}</h2>
-              <p className="mt-2 text-secondary">{runSummary.detail}</p>
+              <p className="mt-2 text-[var(--text-secondary)]">{runSummary.detail}</p>
 
               <div className="mt-6">
                 <ProgressBar
@@ -633,7 +633,7 @@ export const ProjectOverview: React.FC = () => {
                 className={`rounded-standard px-4 py-3 text-left transition-all ${
                   active
                     ? 'bg-white text-inkwell shadow-ambient'
-                    : 'text-secondary hover:bg-white/50 hover:text-inkwell'
+                    : 'text-[var(--text-secondary)] hover:bg-white/50 hover:text-inkwell'
                 }`}
               >
                 <span className="block font-sans text-sm font-medium">{tab.label}</span>
@@ -647,7 +647,7 @@ export const ProjectOverview: React.FC = () => {
           <Card className="p-8">
             <div className="mb-8 flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-secondary">Flow Story</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Flow Story</p>
                 <h2 className="mt-2 text-2xl">创作主路径</h2>
               </div>
               <Badge variant="secondary">Workflow First</Badge>
@@ -669,13 +669,13 @@ export const ProjectOverview: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-secondary">0{index + 1}</span>
+                      <span className="text-sm text-[var(--text-secondary)]">0{index + 1}</span>
                       <Badge variant={getStepBadgeVariant(status)}>
                         {status === 'done' ? 'done' : status === 'active' ? 'now' : 'next'}
                       </Badge>
                     </div>
                     <h3 className="mt-4 text-lg">{step.title}</h3>
-                    <p className="mt-2 text-sm text-secondary">{step.description}</p>
+                    <p className="mt-2 text-sm text-[var(--text-secondary)]">{step.description}</p>
                   </div>
                 )
               })}
@@ -683,30 +683,30 @@ export const ProjectOverview: React.FC = () => {
           </Card>
 
           <Card className="p-8">
-            <p className="text-xs uppercase tracking-[0.25em] text-secondary">Run Detail</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Run Detail</p>
             <h2 className="mt-2 text-2xl">当前运行</h2>
 
             <div className="mt-6 space-y-3">
               {workflowMeta.length > 0 ? (
                 workflowMeta.map(item => (
                   <div key={item.label} className="rounded-standard border border-border bg-parchment/60 p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-secondary">{item.label}</p>
+                    <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">{item.label}</p>
                     <p className="mt-1 text-body">{item.value}</p>
                   </div>
                 ))
               ) : (
-                <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                <div className="rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                   当前还没有活动中的 workflow run。启动生成后，这里会展示真实运行状态。
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-standard border border-border bg-parchment/60 p-3">
-                  <p className="text-secondary">开始时间</p>
+                  <p className="text-[var(--text-secondary)]">开始时间</p>
                   <p className="mt-1 text-body">{formatDateTime(data.current_generation_task?.started_at)}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/60 p-3">
-                  <p className="text-secondary">当前章节</p>
+                  <p className="text-[var(--text-secondary)]">当前章节</p>
                   <p className="mt-1 text-body">
                     {workflow?.current_chapter ?? data.current_generation_task?.current_chapter ?? '待生成'}
                   </p>
@@ -719,7 +719,7 @@ export const ProjectOverview: React.FC = () => {
         <Card className={`${activeTab === 'workflow' ? 'block' : 'hidden'} p-8`}>
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.25em] text-secondary">Agent Strip</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Agent Strip</p>
               <h2 className="mt-2 text-2xl">智能体状态</h2>
             </div>
           </div>
@@ -746,7 +746,7 @@ export const ProjectOverview: React.FC = () => {
                     {state === 'done' ? 'done' : state === 'running' ? 'running' : state === 'error' ? 'error' : 'idle'}
                   </Badge>
                 </div>
-                <p className="mt-2 text-sm text-secondary">{agent.subtitle}</p>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">{agent.subtitle}</p>
               </div>
             )
           })}
@@ -757,7 +757,7 @@ export const ProjectOverview: React.FC = () => {
           <Card className={`${activeTab === 'setup' ? 'p-8' : 'hidden'}`}>
             <div className="flex items-center justify-between gap-4 mb-6">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-secondary">Project Setup</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Project Setup</p>
                 <h2 className="mt-2 text-2xl">创作配置</h2>
               </div>
               {data.status === 'draft' && (
@@ -775,33 +775,33 @@ export const ProjectOverview: React.FC = () => {
               <div className="mt-5 space-y-5">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">小说名称</p>
+                    <p className="text-[var(--text-secondary)]">小说名称</p>
                     <p className="mt-1 text-body">{config?.novel_name || data.name}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">生成模式</p>
+                    <p className="text-[var(--text-secondary)]">生成模式</p>
                     <p className="mt-1 text-body">{getModeLabel(data)}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">章节范围</p>
+                    <p className="text-[var(--text-secondary)]">章节范围</p>
                     <p className="mt-1 text-body">{targetStart} - {targetEnd}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">Token 消耗</p>
+                    <p className="text-[var(--text-secondary)]">Token 消耗</p>
                     <p className="mt-1 text-body">
                       {tokenStats && tokenStats.total_tokens > 0
                         ? `${tokenStats.total_tokens.toLocaleString()} tokens`
                         : '尚无消耗记录'}
                     </p>
                     {tokenStats && tokenStats.total_tokens > 0 && (
-                      <p className="mt-1 text-xs text-secondary">约 ${tokenStats.estimated_cost_usd.toFixed(4)}</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">约 ${tokenStats.estimated_cost_usd.toFixed(4)}</p>
                     )}
                   </div>
                 </div>
 
                 {config?.core_requirement && (
                   <div className="rounded-comfortable border border-border bg-white/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-secondary">Core Requirement</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Core Requirement</p>
                     <div className="mt-3 max-h-72 overflow-y-auto whitespace-pre-line pr-2 text-body">
                       {config.core_requirement}
                     </div>
@@ -810,15 +810,15 @@ export const ProjectOverview: React.FC = () => {
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">跳过策划确认</p>
+                    <p className="text-[var(--text-secondary)]">跳过策划确认</p>
                     <p className="mt-1 text-body">{config?.skip_plan_confirmation ? '是' : '否'}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">跳过章节确认</p>
+                    <p className="text-[var(--text-secondary)]">跳过章节确认</p>
                     <p className="mt-1 text-body">{config?.skip_chapter_confirmation ? '是' : '否'}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-4">
-                    <p className="text-secondary">允许剧情调整</p>
+                    <p className="text-[var(--text-secondary)]">允许剧情调整</p>
                     <p className="mt-1 text-body">{config?.allow_plot_adjustment ? '是' : '否'}</p>
                   </div>
                 </div>
@@ -892,13 +892,13 @@ export const ProjectOverview: React.FC = () => {
             <div className="mt-8 pt-6 border-t border-border">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-secondary">
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-secondary)]">
                     Skill Runtime
                   </p>
                   <h2 className="mt-1 text-2xl">启用创作 Skill</h2>
                 </div>
               </div>
-              <p className="text-sm text-secondary mb-6">
+              <p className="text-sm text-[var(--text-secondary)] mb-6">
                 Skill 会按 Planner、Writer、Revise 的职责精确注入，Critic 保持中立质量标尺。
               </p>
               <SkillSelector
@@ -910,25 +910,25 @@ export const ProjectOverview: React.FC = () => {
 
           <div className={activeTab === 'delivery' ? 'space-y-8' : 'hidden'}>
             <Card className="p-8">
-              <p className="text-xs uppercase tracking-[0.25em] text-secondary">Quality</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Quality</p>
               <h2 className="mt-2 text-2xl">质量与交付</h2>
 
               <div className="mt-6 space-y-4">
                 {data.overall_quality_score > 0 ? (
                   <ProgressBar progress={data.overall_quality_score * 10} message={`总体评分 ${data.overall_quality_score.toFixed(1)}/10`} />
                 ) : (
-                  <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                  <div className="rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                     尚无评分数据。完成至少一章评审后，这里会显示质量闭环结果。
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-standard border border-border bg-parchment/60 p-3">
-                    <p className="text-secondary">已完成章节</p>
+                    <p className="text-[var(--text-secondary)]">已完成章节</p>
                     <p className="mt-1 text-body">{completedChapters}</p>
                   </div>
                   <div className="rounded-standard border border-border bg-parchment/60 p-3">
-                    <p className="text-secondary">分享状态</p>
+                    <p className="text-[var(--text-secondary)]">分享状态</p>
                     <p className="mt-1 text-body">{shareUrl ? '已生成链接' : '待创建'}</p>
                   </div>
                 </div>
@@ -947,7 +947,7 @@ export const ProjectOverview: React.FC = () => {
             </Card>
 
             <Card>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Delivery</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Delivery</p>
               <h2 className="mt-2 text-2xl">导出与分享</h2>
 
               {data.status === 'completed' ? (
@@ -967,22 +967,22 @@ export const ProjectOverview: React.FC = () => {
                     </Button>
                   </div>
                   {shareUrl && (
-                    <div className="rounded-standard border border-border bg-parchment/60 p-3 text-sm text-secondary break-all">
+                    <div className="rounded-standard border border-border bg-parchment/60 p-3 text-sm text-[var(--text-secondary)] break-all">
                       {shareUrl}
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="mt-5 rounded-standard border border-dashed border-border p-4 text-secondary">
+                <div className="mt-5 rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                   项目完成后即可在这里一键导出成品，并生成无需登录的只读分享页。
                 </div>
               )}
             </Card>
 
             <Card>
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Current Artifacts</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Current Artifacts</p>
               <h2 className="mt-2 text-2xl">当前关键产物</h2>
-              <p className="mt-2 text-secondary">
+              <p className="mt-2 text-[var(--text-secondary)]">
                 这些是项目当前版本的核心 artifacts。长期来看，它们会成为创作状态、评审结果和工作流回放的统一事实层。
               </p>
 
@@ -996,7 +996,7 @@ export const ProjectOverview: React.FC = () => {
                           <Badge variant="secondary">{artifact.scope}</Badge>
                           {artifact.is_current && <Badge variant="agent">current</Badge>}
                         </div>
-                        <div className="mt-2 text-secondary">
+                        <div className="mt-2 text-[var(--text-secondary)]">
                           v{artifact.version_number} · {getArtifactScopeLabel(artifact)} · {artifact.source}
                         </div>
                       </div>
@@ -1015,7 +1015,7 @@ export const ProjectOverview: React.FC = () => {
                 ))}
 
                 {!recentArtifacts?.items.length && (
-                  <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                  <div className="rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                     还没有沉淀可展示的当前 artifacts。
                   </div>
                 )}
@@ -1026,7 +1026,7 @@ export const ProjectOverview: React.FC = () => {
 
         {isOwner && activeTab === 'setup' && (
           <Card>
-            <p className="text-xs uppercase tracking-[0.22em] text-secondary">Team</p>
+            <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Team</p>
             <h2 className="mt-2 text-2xl">协作者</h2>
 
             <div className="mt-5 space-y-4">
@@ -1053,8 +1053,8 @@ export const ProjectOverview: React.FC = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="font-medium text-inkwell">{collab.username}</div>
-                          <div className="mt-1 text-sm text-secondary">{collab.email}</div>
-                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-secondary">{collab.role}</div>
+                          <div className="mt-1 text-sm text-[var(--text-secondary)]">{collab.email}</div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">{collab.role}</div>
                         </div>
                         <Button variant="tertiary" size="sm" onClick={() => handleRemoveCollaborator(collab.id)}>
                           移除
@@ -1064,7 +1064,7 @@ export const ProjectOverview: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-secondary">暂无协作者。比赛演示时可以用这一块证明作品支持多人参与和协作浏览。</p>
+                <p className="text-[var(--text-secondary)]">暂无协作者。比赛演示时可以用这一块证明作品支持多人参与和协作浏览。</p>
               )}
             </div>
           </Card>
@@ -1128,7 +1128,7 @@ export const ProjectOverview: React.FC = () => {
           </div>
         )}
       </div>
-    </Layout>
+    
   )
 }
 

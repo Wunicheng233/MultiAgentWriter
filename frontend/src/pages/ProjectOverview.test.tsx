@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { expect, describe, test, vi } from 'vitest'
 import React from 'react'
 import { ToastContext } from '../components/toastContext'
@@ -49,8 +49,10 @@ function renderWithProviders(ui: React.ReactElement) {
   return render(
     <ToastContext.Provider value={{ showToast: vi.fn() }}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/projects/1']}>
-          {ui}
+        <MemoryRouter initialEntries={['/projects/1/overview']}>
+          <Routes>
+            <Route path="/projects/:id/overview" element={ui} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     </ToastContext.Provider>

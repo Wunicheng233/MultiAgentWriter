@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { Layout } from '../components/Layout'
+
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import type { BadgeVariant } from '../components/Badge'
@@ -138,7 +138,7 @@ export const ChapterList: React.FC = () => {
   const activeRun = workflowHistory?.items.find(run => run.status === 'running' || run.status === 'waiting_confirm')
 
   return (
-    <Layout>
+    
       <div className="mx-auto max-w-content space-y-6">
         <Card className="border-sage/20 bg-[linear-gradient(135deg,rgba(91,127,110,0.12),rgba(255,255,255,0.92),rgba(163,139,90,0.08))]">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
@@ -158,26 +158,26 @@ export const ChapterList: React.FC = () => {
               <p className="mt-3 text-body">
                 这一页同时承载作品章节列表和 workflow 历史。长期来看，它应该回答两个问题：现在产出了什么，以及系统是怎么把这些结果生成出来的。
               </p>
-              {project && <p className="mt-3 text-secondary">{project.name}</p>}
+              {project && <p className="mt-3 text-[var(--text-secondary)]">{project.name}</p>}
             </div>
 
             <div className="w-full max-w-xl space-y-3">
               <ProgressBar progress={completionRate} message={`章节完成度 ${completedChapters}/${targetChapters || '-'} 章`} />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-sm">
                 <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                  <p className="text-secondary">目标范围</p>
+                  <p className="text-[var(--text-secondary)]">目标范围</p>
                   <p className="mt-1 text-body">{targetStart} - {targetEnd}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                  <p className="text-secondary">当前章节数</p>
+                  <p className="text-[var(--text-secondary)]">当前章节数</p>
                   <p className="mt-1 text-body">{completedChapters}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                  <p className="text-secondary">平均评分</p>
+                  <p className="text-[var(--text-secondary)]">平均评分</p>
                   <p className="mt-1 text-body">{averageScore > 0 ? averageScore.toFixed(1) : '待生成'}</p>
                 </div>
                 <div className="rounded-standard border border-border bg-parchment/70 p-3">
-                  <p className="text-secondary">历史运行</p>
+                  <p className="text-[var(--text-secondary)]">历史运行</p>
                   <p className="mt-1 text-body">{workflowHistory?.total ?? 0}</p>
                 </div>
               </div>
@@ -189,7 +189,7 @@ export const ChapterList: React.FC = () => {
           <Card>
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Chapters</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Chapters</p>
                 <h2 className="mt-2 text-2xl">章节列表</h2>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -202,7 +202,7 @@ export const ChapterList: React.FC = () => {
               </div>
             </div>
 
-            {isLoading && <p className="mt-5 text-secondary">加载中...</p>}
+            {isLoading && <p className="mt-5 text-[var(--text-secondary)]">加载中...</p>}
 
             <div className="mt-5 space-y-4">
               {chapters?.map(chapter => (
@@ -212,7 +212,7 @@ export const ChapterList: React.FC = () => {
                       <h3 className="font-serif text-xl text-inkwell">
                         {chapter.title || `第${chapter.chapter_index}章`}
                       </h3>
-                      <div className="mt-3 flex flex-wrap gap-3 text-sm text-secondary">
+                      <div className="mt-3 flex flex-wrap gap-3 text-sm text-[var(--text-secondary)]">
                         <span>字数 {chapter.word_count}</span>
                         <span>评分 {chapter.quality_score?.toFixed(1) || '-'}</span>
                         <span>创建于 {formatDateTime(chapter.created_at)}</span>
@@ -236,7 +236,7 @@ export const ChapterList: React.FC = () => {
 
               {!chapters?.length && (
                 <Card>
-                  <p className="py-6 text-center text-secondary">
+                  <p className="py-6 text-center text-[var(--text-secondary)]">
                     还没有章节，开始生成后会在这里出现。
                   </p>
                 </Card>
@@ -247,9 +247,9 @@ export const ChapterList: React.FC = () => {
           <Card>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-secondary">Workflow History</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Workflow History</p>
                 <h2 className="mt-2 text-2xl">运行历史</h2>
-                <p className="mt-2 text-secondary">
+                <p className="mt-2 text-[var(--text-secondary)]">
                   这些记录会成为后续回放、失败归因、质量对比和多轮修订的基础。
                 </p>
               </div>
@@ -276,9 +276,9 @@ export const ChapterList: React.FC = () => {
                           </Badge>
                           <Badge variant="secondary">{getRunKindText(run.run_kind)}</Badge>
                         </div>
-                        <p className="mt-3 text-sm text-secondary">{getRunSummary(run)}</p>
+                        <p className="mt-3 text-sm text-[var(--text-secondary)]">{getRunSummary(run)}</p>
                       </div>
-                      <div className="text-sm text-secondary">
+                      <div className="text-sm text-[var(--text-secondary)]">
                         <div>开始于 {formatDateTime(run.started_at)}</div>
                         <div>结束于 {formatDateTime(run.completed_at)}</div>
                       </div>
@@ -286,19 +286,19 @@ export const ChapterList: React.FC = () => {
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-standard border border-border bg-white/70 p-3">
-                        <p className="text-secondary">当前节点</p>
+                        <p className="text-[var(--text-secondary)]">当前节点</p>
                         <p className="mt-1 text-body">{run.current_step_key || '暂无'}</p>
                       </div>
                       <div className="rounded-standard border border-border bg-white/70 p-3">
-                        <p className="text-secondary">当前章节</p>
+                        <p className="text-[var(--text-secondary)]">当前章节</p>
                         <p className="mt-1 text-body">{run.current_chapter ?? '项目级'}</p>
                       </div>
                       <div className="rounded-standard border border-border bg-white/70 p-3">
-                        <p className="text-secondary">步骤数</p>
+                        <p className="text-[var(--text-secondary)]">步骤数</p>
                         <p className="mt-1 text-body">{stepCount}</p>
                       </div>
                       <div className="rounded-standard border border-border bg-white/70 p-3">
-                        <p className="text-secondary">反馈项</p>
+                        <p className="text-[var(--text-secondary)]">反馈项</p>
                         <p className="mt-1 text-body">{feedbackCount}</p>
                       </div>
                     </div>
@@ -306,12 +306,12 @@ export const ChapterList: React.FC = () => {
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       {run.steps && run.steps.length > 0 && (
                         <div>
-                          <p className="text-xs uppercase tracking-[0.18em] text-secondary">Steps</p>
+                          <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">Steps</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {run.steps.map(step => (
                               <span
                                 key={step.id}
-                                className="rounded-pill border border-border bg-white px-3 py-1 text-xs text-secondary"
+                                className="rounded-pill border border-border bg-white px-3 py-1 text-xs text-[var(--text-secondary)]"
                               >
                                 {step.step_key}
                               </span>
@@ -326,7 +326,7 @@ export const ChapterList: React.FC = () => {
 
                     {run.feedback_items && run.feedback_items.length > 0 && (
                       <div className="mt-4 rounded-standard border border-terracotta/15 bg-terracotta/5 p-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-secondary">Latest Feedback</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-secondary)]">Latest Feedback</p>
                         <p className="mt-2 text-sm text-body">{run.feedback_items[0].content}</p>
                       </div>
                     )}
@@ -335,7 +335,7 @@ export const ChapterList: React.FC = () => {
               })}
 
               {!workflowHistory?.items.length && (
-                <div className="rounded-standard border border-dashed border-border p-4 text-secondary">
+                <div className="rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                   还没有 workflow 历史。触发生成后，这里会开始沉淀项目运行记录。
                 </div>
               )}
@@ -343,7 +343,7 @@ export const ChapterList: React.FC = () => {
           </Card>
         </div>
       </div>
-    </Layout>
+    
   )
 }
 

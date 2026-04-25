@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { Layout } from '../components/Layout'
+import { PublicLayout } from '../components/layout/PublicLayout'
 import { Card } from '../components/Card'
 import { Input } from '../components/Input'
 import { Button } from '../components/Button'
@@ -38,7 +38,7 @@ export const Register: React.FC = () => {
   }
 
   return (
-    <Layout>
+    <PublicLayout>
       <div className="max-w-md mx-auto mt-12">
         <Card>
           <h1 className="text-center text-3xl mb-6">用户注册</h1>
@@ -80,12 +80,12 @@ export const Register: React.FC = () => {
               {isPending ? '注册中...' : '注册'}
             </Button>
           </form>
-          <div className="mt-6 text-center text-secondary">
-            已有账号？ <Link to="/login" className="text-sage hover:underline">去登录</Link>
+          <div className="mt-6 text-center text-[var(--text-secondary)]">
+            已有账号？ <Link to="/login" className="text-[var(--accent-primary)] hover:underline">去登录</Link>
           </div>
         </Card>
       </div>
-    </Layout>
+    </PublicLayout>
   )
 }
 

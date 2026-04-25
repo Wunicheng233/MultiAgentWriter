@@ -35,7 +35,7 @@ export const QualityDashboard: React.FC = () => {
   const projectId = id ? parseInt(id, 10) : 0
   const isValidProjectId = !Number.isNaN(projectId) && projectId > 0
 
-  const { data: analytics, isLoading } = useQuery({
+  const { data: analytics, isLoading, isError, error } = useQuery({
     queryKey: ['project-analytics', projectId],
     queryFn: () => getProjectAnalytics(projectId),
     enabled: isValidProjectId,
@@ -55,8 +55,19 @@ export const QualityDashboard: React.FC = () => {
     return <p className="text-[var(--text-secondary)]">加载中...</p>
   }
 
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <p className="text-[var(--text-danger)]">加载分析数据失败</p>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {error instanceof Error ? error.message : '请稍后重试'}
+        </p>
+      </div>
+    )
+  }
+
   if (!analytics) {
-    return <p className="text-[var(--text-secondary)]">暂无数据分析数据</p>
+    return <p className="text-[var(--text-secondary)]">暂无数据分析数据，请先生成章节并运行质量分析</p>
   }
 
   const dimensionMapping: Record<string, string> = {
