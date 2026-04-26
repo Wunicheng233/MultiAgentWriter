@@ -88,17 +88,14 @@ function renderWithProviders(ui: React.ReactElement) {
 }
 
 describe('ProjectOverview - UI 优化', () => {
-  test('标签页按钮应该有 transition 过渡类名', async () => {
+  test('应该有导航到大纲设定和导出分享的按钮', async () => {
     renderWithProviders(<ProjectOverview />)
-    // 等待所有标签页渲染完成
-    const tabs = await screen.findAllByText(/工作流|创作配置|质量交付/)
-    tabs.forEach(tab => {
-      const button = tab.closest('button')
-      if (button) {
-        expect(button).toHaveClass('transition-all')
-      }
-    })
-    expect(tabs.length).toBeGreaterThan(0)
+    // 等待导航按钮渲染完成
+    const outlineButton = await screen.findByText('大纲设定')
+    const exportButton = await screen.findByText('导出分享')
+
+    expect(outlineButton.closest('a')).toHaveAttribute('href', '/projects/1/outline')
+    expect(exportButton.closest('a')).toHaveAttribute('href', '/projects/1/export')
   })
 
   test.skip('Flow Story 描述应该精简，不应该有长段落说明', async () => {
