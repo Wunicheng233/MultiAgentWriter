@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { useLayoutStore } from '../../store/useLayoutStore'
+import { useProjectStore } from '../../store/useProjectStore'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { NavRail } from './NavRail'
 import { CanvasContainer } from './CanvasContainer'
@@ -9,6 +10,7 @@ import { RightPanel } from './RightPanel'
 import { AIChatPanel } from '../ai/AIChatPanel'
 import { FloatingToggleButton } from '../FloatingToggleButton'
 import { NavBar } from '../NavBar'
+import { ProjectHeader } from './ProjectHeader'
 
 export const AppLayout = () => {
   useLocation()
@@ -28,6 +30,12 @@ export const AppLayout = () => {
       focusMode: state.focusMode,
       setRightPanelWidth: state.setRightPanelWidth,
       toggleNavCollapsed: state.toggleNavCollapsed,
+    }))
+  )
+
+  const { isInProject } = useProjectStore(
+    useShallow((state) => ({
+      isInProject: state.isInProject,
     }))
   )
 
@@ -52,8 +60,8 @@ export const AppLayout = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Top Navigation Bar */}
-        <NavBar />
+        {/* Top Header - ProjectHeader or NavBar */}
+        {isInProject ? <ProjectHeader /> : <NavBar />}
 
         {/* Center Canvas Content - takes remaining space and scrolls */}
         <div className="flex-1 overflow-auto">
