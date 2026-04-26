@@ -7,7 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Button, Card, Badge, Progress } from '../components/v2'
 import AgentCard from '../components/AgentCard'
 import { useLayoutStore } from '../store/useLayoutStore'
-import { useProjectStore } from '../store/useProjectStore'
+import { useProjectStore, type ProjectStatus } from '../store/useProjectStore'
 import {
   getChapter,
   updateChapter,
@@ -78,7 +78,7 @@ export const Editor: React.FC = () => {
 
     const taskProgress = project.current_generation_task?.progress ?? 0
     const progressPercent = project.status === 'completed' ? 100 : taskProgress * 100
-    setProjectStatus(project.status, progressPercent)
+    setProjectStatus(project.status as ProjectStatus, progressPercent)
   }, [id, project, setCurrentProject, setProjectStatus])
 
   const { data: chapter, isLoading, refetch: refetchChapter } = useQuery({
@@ -402,19 +402,24 @@ export const Editor: React.FC = () => {
       {/* Page content wrapped in container for proper scroll */}
       <div className={`mx-auto transition-all duration-200 ${focusMode ? 'max-w-[900px]' : 'max-w-full'}`}>
             {/* Chapter Header Card */}
-            <Card className="mb-6 border-[var(--border-default)] bg-[var(--bg-secondary)] p-4">
+            <Card className="mb-6 border-[var(--border-default)] bg-[var(--bg-secondary)] p-5 shadow-subtle">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {project && <Badge variant="secondary">{getProjectStatusText(project.status)}</Badge>}
-                    <Badge variant={pollingTaskId ? 'status' : 'secondary'}>{currentTaskLabel}</Badge>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    {project && (
+                      <Badge variant="secondary" className={project.status === 'generating' ? 'badge-pulse' : ''}>
+                        {getProjectStatusText(project.status)}
+                      </Badge>
+                    )}
+                    <Badge variant={pollingTaskId ? 'status' : 'secondary'} className={pollingTaskId ? 'badge-pulse' : ''}>
+                      {currentTaskLabel}
+                    </Badge>
                   </div>
-                  <h1 className="truncate text-3xl text-[var(--text-primary)]">
+                  <h1 className="truncate text-[clamp(1.5rem,3vw,2rem)] font-semibold text-[var(--text-primary)]">
                     {chapter?.title || `第${chapterIdx}章`}
                   </h1>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                    {project?.name || '当前项目'} · 第 {activeChapterNumber} 章 · {wordCount} 字 ·
-                    自动保存 {saving ? '进行中' : '已就绪'}
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                    {project?.name || '当前项目'} · 第 {activeChapterNumber} 章 · {wordCount} 字
                   </p>
                 </div>
 
@@ -430,34 +435,37 @@ export const Editor: React.FC = () => {
               </div>
 
               {(pollingTaskId || currentStep) && (
-                <div className="mt-4 border-t border-[var(--border-default)] pt-4">
-                  <p className="text-sm text-[var(--text-secondary)] mb-2">
+                <div className="mt-5 border-t border-[var(--border-subtle)] pt-4">
+                  <p className="text-sm text-[var(--text-secondary)] mb-3">
                     {pollingTaskId
                       ? currentStep || '工作流执行中...'
                       : chapter
                         ? '当前章节已可编辑'
                         : '等待章节内容'}
                   </p>
-                  <Progress value={pollingTaskId ? progress : 100} />
+                  <Progress value={pollingTaskId ? progress : 100} className="progress-gradient" />
                 </div>
               )}
             </Card>
 
             {/* Confirmation Banner */}
             {waitingConfirmChapter !== null && !showConfirmDialog && (
-              <div className="mb-6 rounded-lg border border-[var(--accent-warm)] bg-opacity-10 bg-[var(--accent-warm)] p-4">
+              <div className="confirmation-banner mb-6 rounded-comfortable border border-[var(--accent-warm)] bg-[var(--accent-warm)]/10 p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
-                      {waitingConfirmChapter === 0
-                        ? '策划方案正在等待你的确认'
-                        : `第 ${waitingConfirmChapter} 章正在等待你的确认`}
-                    </p>
-                    <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                      这是工作流暂停点。你可以继续查看内容，但只有确认后系统才会继续推进。
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <span className="badge-pulse w-3 h-3 rounded-full bg-[var(--accent-warm)] mt-0.5"></span>
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        {waitingConfirmChapter === 0
+                          ? '策划方案正在等待你的确认'
+                          : `第 ${waitingConfirmChapter} 章正在等待你的确认`}
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        这是工作流暂停点。你可以继续查看内容，但只有确认后系统才会继续推进。
+                      </p>
+                    </div>
                   </div>
-                  <Button variant="primary" onClick={() => setShowConfirmDialog(true)}>
+                  <Button variant="primary" onClick={() => setShowConfirmDialog(true)} className="flex-shrink-0">
                     打开确认面板
                   </Button>
                 </div>
@@ -468,15 +476,20 @@ export const Editor: React.FC = () => {
             <div className={`grid grid-cols-1 gap-6 transition-all duration-200 ${inspectorOpen ? 'lg:grid-cols-[300px_minmax(0,1fr)]' : 'lg:grid-cols-1'}`}>
               {/* Inspector Panel */}
               {inspectorOpen && (
-                <aside className="space-y-6">
-                  <Card className="p-5">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Run Context</p>
-                    <h2 className="mt-2 text-2xl text-[var(--text-primary)]">{runSummary.headline}</h2>
-                    <p className="mt-2 text-sm text-[var(--text-secondary)]">{runSummary.detail}</p>
+                <aside className="space-y-5">
+                  <Card className="inspector-card p-5 border-[var(--border-default)]">
+                    <p className="text-xs uppercase tracking-[0.25em] text-[var(--text-secondary)]">Run Context</p>
+                    <h2 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">{runSummary.headline}</h2>
+                    <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">{runSummary.detail}</p>
                     <div className="mt-4 space-y-2 text-sm text-[var(--text-secondary)]">
-                      <div>任务状态：{currentTaskLabel}</div>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${pollingTaskId ? 'bg-[var(--accent-primary)]' : 'bg-[var(--text-muted)]'}`}></span>
+                        任务状态：{currentTaskLabel}
+                      </div>
                       {project?.current_generation_task?.current_workflow_run?.current_step_key && (
-                        <div>当前节点：{project.current_generation_task.current_workflow_run.current_step_key}</div>
+                        <div className="pl-4 text-xs">
+                          当前节点：{project.current_generation_task.current_workflow_run.current_step_key}
+                        </div>
                       )}
                     </div>
                   </Card>
@@ -502,16 +515,16 @@ export const Editor: React.FC = () => {
                     </Button>
 
                     {showVersionHistory && (
-                      <Card className="mt-4 max-h-[400px] overflow-y-auto">
-                        <h4 className="mb-3 font-medium text-[var(--text-primary)]">保存的版本</h4>
+                      <Card className="mt-4 max-h-[400px] overflow-y-auto border-[var(--border-default)]">
+                        <h4 className="mb-3 font-medium text-[var(--text-primary)] text-sm">保存的版本</h4>
                         {versions.length === 0 ? (
-                          <p className="text-sm text-[var(--text-secondary)]">暂无历史版本</p>
+                          <p className="text-sm text-[var(--text-secondary)] py-4 text-center">暂无历史版本</p>
                         ) : (
                           <div className="space-y-2">
                             {versions.map(ver => (
                               <div
                                 key={ver.id}
-                                className="flex items-center justify-between rounded-lg border border-[var(--border-default)] p-2 transition-colors hover:border-[var(--accent-primary)]"
+                                className="version-item flex items-center justify-between rounded-standard border border-[var(--border-default)] p-3 cursor-pointer"
                               >
                                 <div>
                                   <div className="text-sm font-medium text-[var(--text-primary)]">V{ver.version_number}</div>
@@ -539,19 +552,20 @@ export const Editor: React.FC = () => {
 
               {/* Editor Area */}
               <div className="flex h-full flex-col">
-                <div className="min-h-[62vh] flex-1 overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] shadow-sm">
+                <div className="editor-container min-h-[62vh] flex-1 overflow-y-auto rounded-comfortable border border-[var(--border-default)] bg-[var(--bg-secondary)] editor-paper transition-all duration-200 hover:border-[var(--border-strong)]">
                   {editor && (
                     <EditorContent
                       editor={editor}
-                      className={`prose-novel mx-auto px-6 pt-0 pb-10 focus:outline-none md:px-10`}
+                      className={`prose-novel mx-auto px-6 pt-8 pb-16 focus:outline-none md:px-12`}
                       style={{
                         maxWidth: focusMode ? '900px' : (inspectorOpen ? '600px' : '860px'),
                       }}
                     />
                   )}
                 </div>
-                <div className="mt-4 flex flex-col gap-3 rounded-lg border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-3 md:flex-row md:items-center md:justify-between">
-                  <div className="text-sm text-[var(--text-secondary)]">
+                <div className="mt-4 flex flex-col gap-3 rounded-comfortable border border-[var(--border-default)] bg-[var(--bg-secondary)] px-5 py-4 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                    <span className={`${saving ? 'saving-indicator' : 'saving-indicator saved'}`}></span>
                     {wordCount} 字 · 自动保存 {saving ? '进行中' : '已就绪'} · Agent {pollingTaskId ? '运行中' : '空闲'}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -569,10 +583,10 @@ export const Editor: React.FC = () => {
 
       {/* 人工确认对话框 */}
       {showConfirmDialog && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[460px] border-l border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 shadow-lg">
-          <Card className="h-full overflow-y-auto" onClick={event => event.stopPropagation()}>
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <h3 className="text-xl text-[var(--text-primary)]">
+        <div className="confirm-dialog-enter fixed inset-y-0 right-0 z-50 w-full max-w-[460px] border-l border-[var(--border-default)] bg-[var(--bg-secondary)] p-4 shadow-elevated">
+          <div className="h-full overflow-y-auto" onClick={event => event.stopPropagation()}>
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <h3 className="text-xl font-semibold text-[var(--text-primary)]">
                 {waitingConfirmChapter === 0
                   ? '策划方案已生成，请确认'
                   : `第${waitingConfirmChapter}章已生成，请确认`
@@ -586,7 +600,7 @@ export const Editor: React.FC = () => {
                 关闭
               </Button>
             </div>
-            <p className="mb-6 text-[var(--text-secondary)]">
+            <p className="mb-6 text-[var(--text-secondary)] leading-relaxed">
               {waitingConfirmChapter === 0
                 ? '你可以选择直接通过，开始生成章节，或者输入修改意见让AI重新调整策划方案。'
                 : '你可以选择直接通过，继续生成下一章，或者输入修改意见让AI重新优化当前章节。'
@@ -596,7 +610,7 @@ export const Editor: React.FC = () => {
             {waitingConfirmChapter === 0 && project && project.file_path && (
               <div className="mb-6">
                 <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">策划方案预览：</label>
-                <div className="max-h-[42vh] overflow-y-auto rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4 text-sm leading-relaxed"
+                <div className="max-h-[42vh] overflow-y-auto rounded-comfortable border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4 text-sm leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(planPreview || '加载中...') }}
                 />
               </div>
@@ -604,7 +618,7 @@ export const Editor: React.FC = () => {
             {waitingConfirmChapter !== 0 && chapter && (
               <div className="mb-6">
                 <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">章节预览：</label>
-                <div className="max-h-[42vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4 text-[var(--text-body)]">
+                <div className="max-h-[42vh] overflow-y-auto whitespace-pre-wrap rounded-comfortable border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-4 text-[var(--text-body)] leading-relaxed">
                   {chapterPreviewText}
                 </div>
               </div>
@@ -615,7 +629,7 @@ export const Editor: React.FC = () => {
                   修改意见（不通过时填写）：
                 </label>
                 <textarea
-                  className="min-h-[120px] w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-body)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]"
+                  className="min-h-[120px] w-full rounded-comfortable border border-[var(--border-default)] bg-[var(--bg-primary)] text-[var(--text-body)] px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] transition-all duration-150"
                   placeholder="例如：'主角人设不对，请修改' / '情节发展太快，放慢节奏增加细节'..."
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
@@ -637,7 +651,7 @@ export const Editor: React.FC = () => {
                 </Button>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       )}
     </div>

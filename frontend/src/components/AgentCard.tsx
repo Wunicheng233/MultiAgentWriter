@@ -30,14 +30,22 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
   return (
     <div
-      className={`border border-[var(--border-default)] rounded-lg mb-3 overflow-hidden cursor-pointer ${
+      className={`inspector-card border border-[var(--border-default)] rounded-comfortable mb-3 overflow-hidden cursor-pointer transition-all duration-150 ${
         status === 'running' ? 'shadow-[var(--shadow-default)]' : ''
       }`}
       onClick={() => output && setExpanded(!expanded)}
     >
       <div className="flex items-center justify-between px-4 py-3">
-        <Badge variant="agent">{name.toUpperCase()}</Badge>
-        <span className={`text-sm px-3 py-1 rounded-full ${statusClasses[status]}`}>
+        <div className="flex items-center gap-3">
+          <span className={`agent-status-indicator ${status === 'running' ? 'running' : ''} ${
+            status === 'done' ? 'bg-[var(--accent-gold)]' :
+            status === 'error' ? 'bg-[var(--accent-warm)]' :
+            status === 'running' ? 'bg-[var(--accent-primary)]' :
+            'bg-[var(--text-muted)]'
+          }`}></span>
+          <Badge variant="agent">{name.toUpperCase()}</Badge>
+        </div>
+        <span className={`text-sm px-3 py-1 rounded-full ${statusClasses[status]} ${status === 'running' ? 'badge-pulse' : ''}`}>
           {statusText[status]}
         </span>
         {output && (

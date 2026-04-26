@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
 import { Card, Badge, Button, Input, Progress } from '../components/v2'
 import { useLayoutStore } from '../store/useLayoutStore'
-import { useProjectStore } from '../store/useProjectStore'
+import { useProjectStore, type ProjectStatus } from '../store/useProjectStore'
 import {
   addCollaborator,
   cleanStuckTasks,
@@ -50,7 +50,7 @@ export const ProjectExport: React.FC = () => {
 
     const progress = data.current_generation_task?.progress ?? 0
     const progressPercent = data.status === 'completed' ? 100 : progress * 100
-    setProjectStatus(data.status, progressPercent)
+    setProjectStatus(data.status as ProjectStatus, progressPercent)
   }, [id, data, setCurrentProject, setProjectStatus])
 
   const { data: recentArtifacts } = useQuery({

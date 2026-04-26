@@ -13,8 +13,8 @@ export interface AgentCardProps {
   className?: string
 }
 
-const statusColors: Record<AgentStatus, 'default' | 'success' | 'warning' | 'error'> = {
-  idle: 'default',
+const statusColors: Record<AgentStatus, 'secondary' | 'success' | 'warning' | 'error'> = {
+  idle: 'secondary',
   running: 'warning',
   done: 'success',
   error: 'error',

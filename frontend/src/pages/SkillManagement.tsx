@@ -110,7 +110,7 @@ export const SkillManagement: React.FC = () => {
     },
   })
 
-  const skills = data?.skills ?? []
+  const skills = useMemo(() => data?.skills ?? [], [data?.skills])
   const enabledSkills = project?.config?.skills?.enabled ?? []
   const normalizedEnabled = normalizeEnabled(enabledSkills)
   const enabledIds = new Set(normalizedEnabled.map(item => item.skill_id))

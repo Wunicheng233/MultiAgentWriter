@@ -182,26 +182,32 @@
 .prose-novel {
   font-family: 'Tinos', 'LXGW WenKai', 'Noto Serif SC', Georgia, serif;
   font-size: 18px;
-  line-height: 1.85;
+  line-height: 1.9;
   letter-spacing: 0.02em;
   color: var(--text-body);
   -webkit-font-smoothing: antialiased;
 }
 
 .prose-novel p {
-  margin-bottom: 1.5em;
+  margin-bottom: 1.4em;
   text-indent: 2em;    /* 中文首行缩进，真正的"书籍感" */
+  transition: background-color 150ms ease-out;
+}
+
+.prose-novel p:has(br:only-child):empty,
+.prose-novel p:empty {
+  margin-bottom: 1.4em;
 }
 
 .prose-novel h1,
 .prose-novel h2,
 .prose-novel h3 {
-  font-family: 'Tinos', 'LXGW WenKai', 'Noto Serif SC', Georgia, serif;
+  font-family: 'Ibarra Real Nova', 'Noto Serif SC', Georgia, serif;
   font-weight: 600;
   color: var(--text-primary);
-  margin-top: 2em;
+  margin-top: 2.2em;
   margin-bottom: 0.8em;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-indent: 0;
 }
 
@@ -228,6 +234,60 @@
   text-indent: 0;
 }
 
+/* Editor Cursor - 更优雅的光标样式 */
+.prose-novel .ProseMirror-cursor {
+  border-left: 2px solid var(--accent-primary) !important;
+  margin-left: -1px;
+}
+
+/* Editor Selection - 选中文本高亮 */
+.prose-novel .ProseMirror-selectednode {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.prose-novel ::selection {
+  background-color: rgba(91, 127, 110, 0.2);
+  color: var(--text-primary);
+}
+
+.prose-novel ::-moz-selection {
+  background-color: rgba(91, 127, 110, 0.2);
+  color: var(--text-primary);
+}
+
+/* Placeholder 样式 */
+.prose-novel .is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  position: absolute;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* 纸张纹理背景 */
+.editor-paper {
+  background: linear-gradient(to bottom, var(--bg-secondary) 0%, var(--bg-secondary) 100%);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.02) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+/* 暗色主题下的纸张纹理 */
+[data-theme="deep-dark"] .editor-paper {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.015) 1px, transparent 0);
+}
+
+/* 编辑器聚焦时的边框高亮 */
+.editor-container:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px rgba(91, 127, 110, 0.08), var(--shadow-default);
+  transition: all 200ms ease-out;
+}
+
 /* Typography for UI content - 保持无衬线，快速阅读 */
 .editor-content {
   font-family: 'Inter', 'LXGW WenKai', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -252,4 +312,116 @@
 
 .editor-content:focus {
   outline: none;
+}
+
+/* 状态徽章呼吸动画 */
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* Agent 卡片状态指示器 */
+.agent-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 200ms ease-out;
+}
+
+.agent-status-indicator.running {
+  box-shadow: 0 0 0 3px rgba(91, 127, 110, 0.2);
+  animation: agent-running 1.5s ease-in-out infinite;
+}
+
+@keyframes agent-running {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* 确认对话框滑入动画 */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.confirm-dialog-enter {
+  animation: slide-in-right 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 保存状态指示器 */
+@keyframes saving-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.saving-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-gold);
+  margin-right: 6px;
+  animation: saving-pulse 1s ease-in-out infinite;
+}
+
+.saving-indicator.saved {
+  background-color: var(--accent-primary);
+  animation: none;
+}
+
+/* Inspector 面板卡片悬浮效果 */
+.inspector-card {
+  transition: all 150ms ease-out;
+}
+
+.inspector-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* 版本历史条目悬浮效果 */
+.version-item {
+  transition: all 150ms ease-out;
+}
+
+.version-item:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+}
+
+/* 进度条渐变效果 */
+.progress-gradient {
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-gold) 100%);
+}
+
+/* 确认横幅高亮效果 */
+.confirmation-banner {
+  position: relative;
+  overflow: hidden;
+}
+
+.confirmation-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(192, 107, 78, 0.1), transparent);
+  animation: banner-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes banner-shimmer {
+  0% { left: -100%; }
+  50%, 100% { left: 100%; }
 }

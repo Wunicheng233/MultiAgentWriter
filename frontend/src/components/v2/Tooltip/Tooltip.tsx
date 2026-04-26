@@ -103,9 +103,9 @@ export const Tooltip: React.FC<TooltipProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
     >
-      {React.cloneElement(child, {
+      {React.cloneElement(child as React.ReactElement, {
         'aria-describedby': tooltipId,
-      })}
+      } as React.Attributes)}
 
       <div
         id={tooltipId}

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { Card, Badge, Button, Progress } from '../components/v2'
 import type { BadgeVariant } from '../components/v2'
-import { useProjectStore } from '../store/useProjectStore'
+import { useProjectStore, type ProjectStatus } from '../store/useProjectStore'
 import { getProject, getProjectWorkflowRuns, listChapters } from '../utils/endpoints'
 import { getProjectStatusText, getTaskStatusText } from '../utils/workflow'
 import type { WorkflowRun } from '../types/api'
@@ -120,7 +120,7 @@ export const ChapterList: React.FC = () => {
 
     const progress = project.current_generation_task?.progress ?? 0
     const progressPercent = project.status === 'completed' ? 100 : progress * 100
-    setProjectStatus(project.status, progressPercent)
+    setProjectStatus(project.status as ProjectStatus, progressPercent)
   }, [id, project, setCurrentProject, setProjectStatus])
 
   const { data: chapters, isLoading } = useQuery({

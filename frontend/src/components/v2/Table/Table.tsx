@@ -71,7 +71,7 @@ export function Table<T extends Record<string, unknown>>({
           ) : (
             dataSource.map((record, index) => (
               <tr
-                key={record[rowKey] ?? index}
+                key={(record[rowKey] as React.Key) ?? index}
                 className={`
                   border-b border-[var(--border-default)]
                   ${striped && index % 2 === 1 ? 'bg-[var(--bg-tertiary)]' : ''}
@@ -85,7 +85,7 @@ export function Table<T extends Record<string, unknown>>({
                       key={col.key}
                       className={`${paddingClass} text-[var(--text-body)] ${getAlignClass(col.align)}`}
                     >
-                      {col.render ? col.render(value, record, index) : value}
+                      {col.render ? col.render(value, record, index) : (value as React.ReactNode)}
                     </td>
                   )
                 })}

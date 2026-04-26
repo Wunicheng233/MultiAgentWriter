@@ -4,8 +4,8 @@ import { useProjectStore } from '../../store/useProjectStore'
 import { useLayoutStore } from '../../store/useLayoutStore'
 import { Badge } from '../v2/Badge/Badge'
 
-const statusConfig: Record<string, { variant: 'default' | 'success' | 'warning' | 'error'; label: string }> = {
-  draft: { variant: 'default', label: '草稿' },
+const statusConfig: Record<string, { variant: 'secondary' | 'success' | 'warning' | 'error'; label: string }> = {
+  draft: { variant: 'secondary', label: '草稿' },
   generating: { variant: 'warning', label: '生成中' },
   waiting_confirm: { variant: 'warning', label: '待确认' },
   completed: { variant: 'success', label: '已完成' },

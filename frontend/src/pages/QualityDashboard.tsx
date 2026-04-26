@@ -8,7 +8,7 @@ import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { Card, Badge, Button, Progress } from '../components/v2'
 import type { BadgeVariant } from '../components/v2'
-import { useProjectStore } from '../store/useProjectStore'
+import { useProjectStore, type ProjectStatus } from '../store/useProjectStore'
 import { getProject, getProjectAnalytics } from '../utils/endpoints'
 import { getProjectStatusText } from '../utils/workflow'
 
@@ -56,7 +56,7 @@ export const QualityDashboard: React.FC = () => {
 
     const progress = project.current_generation_task?.progress ?? 0
     const progressPercent = project.status === 'completed' ? 100 : progress * 100
-    setProjectStatus(project.status, progressPercent)
+    setProjectStatus(project.status as ProjectStatus, progressPercent)
   }, [id, project, setCurrentProject, setProjectStatus])
 
   if (!isValidProjectId) {
