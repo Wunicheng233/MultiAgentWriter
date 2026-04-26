@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider } from './components/Toast'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -53,6 +53,43 @@ function ProtectedLayout() {
   )
 }
 
+// Export AppRoutes for testing
+export function AppRoutes() {
+  return (
+    <Suspense fallback={<RouteLoader />}>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/share/:token" element={<ShareView />} />
+        <Route path="/showcase" element={<ComponentShowcase />} />
+
+        {/* Protected routes with unified 3-column layout */}
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/projects/new" element={<CreateProject />} />
+
+          {/* Nested project routes with unified prefix */}
+          <Route path="/projects/:id/*" element={<Outlet />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<ProjectOverview />} />
+            <Route path="chapters" element={<ChapterList />} />
+            <Route path="workflows/:runId" element={<WorkflowRunDetail />} />
+            <Route path="artifacts/:artifactId" element={<ArtifactDetail />} />
+            <Route path="editor/:chapterIndex" element={<Editor />} />
+            <Route path="write/:chapterIndex" element={<Navigate to="../editor/:chapterIndex" replace />} />
+            <Route path="read/:chapterIndex" element={<Reader />} />
+            <Route path="analytics" element={<QualityDashboard />} />
+          </Route>
+
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </Suspense>
+  )
+}
+
 function App() {
   const initializeAuth = useAuthStore(state => state.initializeAuth)
 
@@ -64,30 +101,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ToastProvider>
-          <Suspense fallback={<RouteLoader />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/share/:token" element={<ShareView />} />
-              <Route path="/showcase" element={<ComponentShowcase />} />
-
-              {/* Protected routes with unified 3-column layout */}
-              <Route element={<ProtectedLayout />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/projects/new" element={<CreateProject />} />
-                <Route path="/projects/:id/overview" element={<ProjectOverview />} />
-                <Route path="/projects/:id/chapters" element={<ChapterList />} />
-                <Route path="/projects/:id/workflows/:runId" element={<WorkflowRunDetail />} />
-                <Route path="/projects/:id/artifacts/:artifactId" element={<ArtifactDetail />} />
-                <Route path="/projects/:id/write/:chapterIndex" element={<Editor />} />
-                <Route path="/projects/:id/read/:chapterIndex" element={<Reader />} />
-                <Route path="/projects/:id/analytics" element={<QualityDashboard />} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-            </Routes>
-          </Suspense>
+          <AppRoutes />
         </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>
