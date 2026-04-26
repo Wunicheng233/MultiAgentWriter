@@ -7,6 +7,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Button, Card, Badge, Progress } from '../components/v2'
 import AgentCard from '../components/AgentCard'
 import { useLayoutStore } from '../store/useLayoutStore'
+import { useProjectStore } from '../store/useProjectStore'
 import {
   getChapter,
   updateChapter,
@@ -60,11 +61,25 @@ export const Editor: React.FC = () => {
   const [liveCurrentChapter, setLiveCurrentChapter] = useState<number | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
 
+  const setCurrentProject = useProjectStore(state => state.setCurrentProject)
+  const setProjectStatus = useProjectStore(state => state.setProjectStatus)
+
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
     enabled: projectId > 0,
   })
+
+  // 初始化 ProjectStore
+  useEffect(() => {
+    if (!project || !id) return
+
+    setCurrentProject(id, project.name)
+
+    const taskProgress = project.current_generation_task?.progress ?? 0
+    const progressPercent = project.status === 'completed' ? 100 : taskProgress * 100
+    setProjectStatus(project.status, progressPercent)
+  }, [id, project, setCurrentProject, setProjectStatus])
 
   const { data: chapter, isLoading, refetch: refetchChapter } = useQuery({
     queryKey: ['chapter', projectId, chapterIdx],

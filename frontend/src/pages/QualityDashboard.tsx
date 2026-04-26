@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
@@ -8,6 +8,7 @@ import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { Card, Badge, Button, Progress } from '../components/v2'
 import type { BadgeVariant } from '../components/v2'
+import { useProjectStore } from '../store/useProjectStore'
 import { getProject, getProjectAnalytics } from '../utils/endpoints'
 import { getProjectStatusText } from '../utils/workflow'
 
@@ -32,6 +33,9 @@ export const QualityDashboard: React.FC = () => {
   const projectId = id ? parseInt(id, 10) : 0
   const isValidProjectId = !Number.isNaN(projectId) && projectId > 0
 
+  const setCurrentProject = useProjectStore(state => state.setCurrentProject)
+  const setProjectStatus = useProjectStore(state => state.setProjectStatus)
+
   const { data: analytics, isLoading, isError, error } = useQuery({
     queryKey: ['project-analytics', projectId],
     queryFn: () => getProjectAnalytics(projectId),
@@ -43,6 +47,17 @@ export const QualityDashboard: React.FC = () => {
     queryFn: () => getProject(projectId),
     enabled: isValidProjectId,
   })
+
+  // 初始化 ProjectStore
+  useEffect(() => {
+    if (!project || !id) return
+
+    setCurrentProject(id, project.name)
+
+    const progress = project.current_generation_task?.progress ?? 0
+    const progressPercent = project.status === 'completed' ? 100 : progress * 100
+    setProjectStatus(project.status, progressPercent)
+  }, [id, project, setCurrentProject, setProjectStatus])
 
   if (!isValidProjectId) {
     return <p className="text-[var(--text-secondary)]">项目ID无效</p>

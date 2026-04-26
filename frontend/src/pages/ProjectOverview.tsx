@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { Card, Badge, Button, Input, Progress, AgentCard } from '../components/v2'
 import { useLayoutStore } from '../store/useLayoutStore'
+import { useProjectStore } from '../store/useProjectStore'
 import type { BadgeVariant } from '../components/v2'
 import SkillSelector from '../components/SkillSelector'
 import {
@@ -269,11 +270,25 @@ export const ProjectOverview: React.FC = () => {
   const user = useAuthStore(state => state.user)
   const queryClient = useQueryClient()
 
+  const setCurrentProject = useProjectStore(state => state.setCurrentProject)
+  const setProjectStatus = useProjectStore(state => state.setProjectStatus)
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
     enabled: isValidProjectId,
   })
+
+  // 初始化 ProjectStore
+  useEffect(() => {
+    if (!data || !id) return
+
+    setCurrentProject(id, data.name)
+
+    const progress = data.current_generation_task?.progress ?? 0
+    const progressPercent = data.status === 'completed' ? 100 : progress * 100
+    setProjectStatus(data.status, progressPercent)
+  }, [id, data, setCurrentProject, setProjectStatus])
 
   const { data: tokenStats } = useQuery({
     queryKey: ['project-token-stats', projectId],

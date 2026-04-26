@@ -24,6 +24,20 @@ vi.mock('../store/useLayoutStore', () => ({
   },
 }))
 
+// Mock useProjectStore with setters we can spy on
+const mockSetCurrentProject = vi.fn()
+const mockSetProjectStatus = vi.fn()
+
+vi.mock('../store/useProjectStore', () => ({
+  useProjectStore: (selector?: (state: any) => any) => {
+    const state = {
+      setCurrentProject: mockSetCurrentProject,
+      setProjectStatus: mockSetProjectStatus,
+    }
+    return selector ? selector(state) : state
+  },
+}))
+
 // Mock Layout
 vi.mock('../components/Layout', () => ({
   Layout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -153,6 +167,102 @@ describe('ProjectOverview - 自动展开顶栏', () => {
 
     await waitFor(() => {
       expect(mockSetHeaderCollapsed).toHaveBeenCalledWith(false)
+    })
+  })
+})
+
+describe('ProjectOverview - ProjectStore 初始化', () => {
+  beforeEach(() => {
+    mockSetCurrentProject.mockClear()
+    mockSetProjectStatus.mockClear()
+    vi.clearAllMocks()
+  })
+
+  test('当项目数据加载完成后，应该调用 setCurrentProject 传入正确的 id 和 name', async () => {
+    renderWithProviders(<ProjectOverview />)
+
+    await waitFor(() => {
+      expect(mockSetCurrentProject).toHaveBeenCalledWith('1', 'Test Project')
+    })
+  })
+
+  test('当项目数据加载完成后，应该调用 setProjectStatus 传入正确的状态', async () => {
+    renderWithProviders(<ProjectOverview />)
+
+    await waitFor(() => {
+      expect(mockSetProjectStatus).toHaveBeenCalledWith('draft', 0)
+    })
+  })
+
+  test('对于 generating 状态的项目，应该传入正确的进度', async () => {
+    const getProject = (await import('../utils/endpoints')).getProject as vi.Mock
+    getProject.mockResolvedValueOnce({
+      id: 1,
+      user_id: 1,
+      name: 'Generating Project',
+      description: 'Test',
+      content_type: 'full_novel',
+      status: 'generating',
+      overall_quality_score: 0,
+      created_at: '2026-04-25T00:00:00',
+      updated_at: '2026-04-25T00:00:00',
+      config: {},
+      current_generation_task: {
+        progress: 0.5,
+      },
+    })
+
+    const queryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <ToastContext.Provider value={{ showToast: vi.fn() }}>
+        <QueryClientProvider client={queryClient2}>
+          <MemoryRouter initialEntries={['/projects/1/overview']}>
+            <Routes>
+              <Route path="/projects/:id/overview" element={<ProjectOverview />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ToastContext.Provider>
+    )
+
+    await waitFor(() => {
+      expect(mockSetProjectStatus).toHaveBeenCalledWith('generating', 50)
+    })
+  })
+
+  test('id 变化时应该重新初始化项目状态', async () => {
+    const getProject = (await import('../utils/endpoints')).getProject as vi.Mock
+    getProject.mockClear()
+    getProject.mockResolvedValue({
+      id: 2,
+      user_id: 1,
+      name: 'Another Project',
+      description: 'Test',
+      content_type: 'full_novel',
+      status: 'completed',
+      overall_quality_score: 8.5,
+      created_at: '2026-04-25T00:00:00',
+      updated_at: '2026-04-25T00:00:00',
+      config: {},
+      chapters: [],
+    })
+
+    const queryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <ToastContext.Provider value={{ showToast: vi.fn() }}>
+        <QueryClientProvider client={queryClient2}>
+          <MemoryRouter initialEntries={['/projects/2/overview']}>
+            <Routes>
+              <Route path="/projects/:id/overview" element={<ProjectOverview />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ToastContext.Provider>
+    )
+
+    await waitFor(() => {
+      expect(mockSetCurrentProject).toHaveBeenCalledWith('2', 'Another Project')
+      expect(mockSetProjectStatus).toHaveBeenCalledWith('completed', 100)
     })
   })
 })
