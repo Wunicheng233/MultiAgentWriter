@@ -4,7 +4,7 @@ import { useLayoutStore } from '../store/useLayoutStore'
 
 export const useKeyboardShortcuts = () => {
   const navigate = useNavigate()
-  const { toggleNavCollapsed, toggleRightPanel, toggleFocusMode } = useLayoutStore()
+  const { toggleNavCollapsed, toggleRightPanel, toggleFocusMode, toggleHeader, setRightPanelOpen } = useLayoutStore()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -23,6 +23,22 @@ export const useKeyboardShortcuts = () => {
         e.preventDefault()
         e.stopPropagation()
         toggleNavCollapsed()
+        return
+      }
+
+      // Command/Ctrl + T: Toggle header
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 't' && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        toggleHeader()
+        return
+      }
+
+      // Command/Ctrl + I: Toggle AI assistant panel (open)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i' && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        setRightPanelOpen(true)
         return
       }
 
@@ -57,7 +73,7 @@ export const useKeyboardShortcuts = () => {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [navigate, toggleNavCollapsed, toggleRightPanel, toggleFocusMode])
+  }, [navigate, toggleNavCollapsed, toggleHeader, setRightPanelOpen, toggleRightPanel, toggleFocusMode])
 }
 
 export default useKeyboardShortcuts
