@@ -1,15 +1,17 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Card, Button, Input } from '../components/v2'
+import { Card, Button, Input, Checkbox } from '../components/v2'
 import { ThemeSelector } from '../components/ThemeSelector'
 import { CanvasContainer } from '../components/layout/CanvasContainer'
 import { useAuthStore } from '../store/useAuthStore'
+import { useLayoutStore } from '../store/useLayoutStore'
 import { clearApiKey, getUserMonthlyTokenStats, updateApiKey } from '../utils/endpoints'
 import { useToast } from '../components/toastContext'
 
 export const Settings: React.FC = () => {
   const { user, setUser } = useAuthStore()
+  const { autoExpandHeaderInProject, setAutoExpandHeaderInProject } = useLayoutStore()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -78,6 +80,20 @@ export const Settings: React.FC = () => {
       <div className="grid gap-6">
         <Card>
           <ThemeSelector />
+        </Card>
+
+        <Card>
+          <h3 className="text-lg font-medium mb-4 text-[var(--text-primary)]">布局偏好</h3>
+
+          <div className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <Checkbox
+                checked={autoExpandHeaderInProject}
+                onChange={setAutoExpandHeaderInProject}
+              />
+              <span className="text-[var(--text-body)]">进入项目时自动展开顶栏</span>
+            </label>
+          </div>
         </Card>
 
         <Card>
