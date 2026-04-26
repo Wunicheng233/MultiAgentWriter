@@ -13,10 +13,10 @@ describe('Badge', () => {
     expect(screen.getByText(/primary/i)).toHaveClass(/accent-primary/)
 
     rerender(<Badge variant="success">Success</Badge>)
-    expect(screen.getByText(/success/i)).toHaveClass(/bg-green-500/)
+    expect(screen.getByText(/success/i)).toHaveClass(/bg-stone-100/)
 
     rerender(<Badge variant="error">Error</Badge>)
-    expect(screen.getByText(/error/i)).toHaveClass(/bg-red-500/)
+    expect(screen.getByText(/error/i)).toHaveClass(/bg-rose-50/)
   })
 
   it('applies custom className correctly', () => {

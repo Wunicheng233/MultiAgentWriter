@@ -4,10 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Button } from '../components/Button'
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import { ProgressBar } from '../components/ProgressBar'
+import { Button, Card, Badge, Progress } from '../components/v2'
 import AgentCard from '../components/AgentCard'
 import { useLayoutStore } from '../store/useLayoutStore'
 import {
@@ -419,16 +416,14 @@ export const Editor: React.FC = () => {
 
               {(pollingTaskId || currentStep) && (
                 <div className="mt-4 border-t border-[var(--border-default)] pt-4">
-                  <ProgressBar
-                    progress={pollingTaskId ? progress : 100}
-                    message={
-                      pollingTaskId
-                        ? currentStep || '工作流执行中...'
-                        : chapter
-                          ? '当前章节已可编辑'
-                          : '等待章节内容'
-                    }
-                  />
+                  <p className="text-sm text-[var(--text-secondary)] mb-2">
+                    {pollingTaskId
+                      ? currentStep || '工作流执行中...'
+                      : chapter
+                        ? '当前章节已可编辑'
+                        : '等待章节内容'}
+                  </p>
+                  <Progress value={pollingTaskId ? progress : 100} />
                 </div>
               )}
             </Card>

@@ -1,9 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Card, Badge, Button } from '../components/v2'
 import { getProject, getProjectArtifact, getProjectArtifacts } from '../utils/endpoints'
 import {
   getArtifactCompareSummary,

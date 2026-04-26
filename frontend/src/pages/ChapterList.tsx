@@ -2,11 +2,8 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import type { BadgeVariant } from '../components/Badge'
-import { Button } from '../components/Button'
-import { ProgressBar } from '../components/ProgressBar'
+import { Card, Badge, Button, Progress } from '../components/v2'
+import type { BadgeVariant } from '../components/v2'
 import { getProject, getProjectWorkflowRuns, listChapters } from '../utils/endpoints'
 import { getProjectStatusText, getTaskStatusText } from '../utils/workflow'
 import type { WorkflowRun } from '../types/api'
@@ -14,26 +11,26 @@ import type { WorkflowRun } from '../types/api'
 function getChapterStatusColor(status: string): BadgeVariant {
   switch (status) {
     case 'generated':
-      return 'agent'
+      return 'success'
     case 'edited':
-      return 'status'
+      return 'warning'
     case 'draft':
       return 'secondary'
     default:
-      return 'genre'
+      return 'secondary'
   }
 }
 
 function getRunStatusColor(status: string): BadgeVariant {
   switch (status) {
     case 'completed':
-      return 'agent'
+      return 'success'
     case 'running':
     case 'waiting_confirm':
-      return 'status'
+      return 'warning'
     case 'failed':
     case 'cancelled':
-      return 'genre'
+      return 'error'
     default:
       return 'secondary'
   }
@@ -162,7 +159,8 @@ export const ChapterList: React.FC = () => {
             </div>
 
             <div className="w-full max-w-xl space-y-3">
-              <ProgressBar progress={completionRate} message={`章节完成度 ${completedChapters}/${targetChapters || '-'} 章`} />
+              <p className="text-sm text-[var(--text-secondary)]">章节完成度 {completedChapters}/{targetChapters || '-'} 章</p>
+              <Progress value={completionRate} />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-sm">
                 <div className="rounded-standard border border-border bg-parchment/70 p-3">
                   <p className="text-[var(--text-secondary)]">目标范围</p>

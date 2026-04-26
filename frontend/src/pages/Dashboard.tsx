@@ -1,11 +1,8 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import type { BadgeVariant } from '../components/Badge'
-import { Button } from '../components/Button'
-import { ProgressBar } from '../components/ProgressBar'
+import { Card, Badge, Button, Progress } from '../components/v2'
+import type { BadgeVariant } from '../components/v2'
 import { CanvasContainer } from '../components/layout/CanvasContainer'
 import { listProjects } from '../utils/endpoints'
 import type { Project } from '../types/api'
@@ -19,10 +16,10 @@ export const Dashboard: React.FC = () => {
   const getStatusColor = (status: string): BadgeVariant => {
     switch (status) {
       case 'draft': return 'secondary'
-      case 'generating': return 'status'
-      case 'completed': return 'agent'
-      case 'failed': return 'genre'
-      default: return 'genre'
+      case 'generating': return 'warning'
+      case 'completed': return 'success'
+      case 'failed': return 'error'
+      default: return 'secondary'
     }
   }
 
@@ -80,8 +77,9 @@ export const Dashboard: React.FC = () => {
                     <span className="text-[var(--text-secondary)]">总体质量</span>
                     <span className="text-[var(--text-body)] font-medium">{project.overall_quality_score.toFixed(1)}/10</span>
                   </div>
-                  <ProgressBar
-                    progress={project.overall_quality_score * 10}
+                  <Progress
+                    value={project.overall_quality_score * 10}
+                    size="sm"
                   />
                 </div>
               )}

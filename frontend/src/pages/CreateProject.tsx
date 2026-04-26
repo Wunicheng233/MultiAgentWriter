@@ -2,10 +2,7 @@ import React, { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { Card } from '../components/Card'
-import { Input, Textarea } from '../components/Input'
-import { Button } from '../components/Button'
-import { ProgressBar } from '../components/ProgressBar'
+import { Card, Input, Textarea, Button, Progress } from '../components/v2'
 import { createProject } from '../utils/endpoints'
 import { useToast } from '../components/toastContext'
 import { getErrorMessage } from '../utils/errorMessage'
@@ -170,7 +167,7 @@ export const CreateProject: React.FC = () => {
               <h2 className="mt-2 text-2xl">{currentStepMeta.title}</h2>
               <p className="mt-2 text-[var(--text-secondary)]">{currentStepMeta.description}</p>
               <div className="mt-5">
-                <ProgressBar progress={progress} message={`步骤 ${currentStep}/${steps.length}: ${currentStepMeta.title}`} />
+                <Progress value={progress} />
               </div>
             </div>
           </div>
@@ -215,7 +212,7 @@ export const CreateProject: React.FC = () => {
                   label="项目简介"
                   placeholder="一句话说明这部作品最值得被看见的地方"
                   value={formData.description || ''}
-                  onChange={event => updateForm({ description: event.target.value })}
+                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => updateForm({ description: event.target.value })}
                 />
 
                 <div className="space-y-3">
@@ -235,7 +232,7 @@ export const CreateProject: React.FC = () => {
                           name="content_type"
                           value={type.value}
                           checked={formData.content_type === type.value}
-                          onChange={event => updateForm({ content_type: event.target.value as ContentType })}
+                          onChange={(event: React.ChangeEvent<HTMLInputElement>) => updateForm({ content_type: event.target.value as ContentType })}
                           className="sr-only"
                         />
                         <div className="font-medium">{type.label}</div>
@@ -275,7 +272,7 @@ export const CreateProject: React.FC = () => {
                   label="小说简介"
                   placeholder="介绍故事背景、主要人物关系和核心主题"
                   value={formData.novel_description || ''}
-                  onChange={event => updateForm({ novel_description: event.target.value })}
+                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => updateForm({ novel_description: event.target.value })}
                 />
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -284,13 +281,13 @@ export const CreateProject: React.FC = () => {
                     type="number"
                     placeholder="100000"
                     value={formData.total_words || ''}
-                    onChange={event => updateForm({ total_words: parseInt(event.target.value, 10) || 0 })}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => updateForm({ total_words: parseInt(event.target.value, 10) || 0 })}
                   />
                   <Input
                     label="核心卖点 / 钩子"
                     placeholder="一句话说清它为什么抓人"
                     value={formData.core_hook || ''}
-                    onChange={event => updateForm({ core_hook: event.target.value })}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => updateForm({ core_hook: event.target.value })}
                   />
                 </div>
 
@@ -299,7 +296,7 @@ export const CreateProject: React.FC = () => {
                   placeholder="详细描述你想要的故事，包括风格、节奏、角色关系、禁忌项和特殊要求"
                   className="min-h-[180px]"
                   value={formData.core_requirement || ''}
-                  onChange={event => updateForm({ core_requirement: event.target.value })}
+                  onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => updateForm({ core_requirement: event.target.value })}
                 />
 
                 <div className="rounded-comfortable border border-border bg-parchment/60 p-4">

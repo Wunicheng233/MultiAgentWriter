@@ -2,9 +2,7 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { PublicLayout } from '../components/layout/PublicLayout'
-import { Card } from '../components/Card'
-import { Input } from '../components/Input'
-import { Button } from '../components/Button'
+import { Card, Input, Button } from '../components/v2'
 import { useAuthStore } from '../store/useAuthStore'
 import { login } from '../utils/endpoints'
 import { useToast } from '../components/toastContext'
@@ -58,10 +56,11 @@ export const Login: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              className="w-full mt-6"
-              disabled={isPending}
+              fullWidth
+              className="mt-6"
+              loading={isPending}
             >
-              {isPending ? '登录中...' : '登录'}
+              登录
             </Button>
           </form>
           <div className="mt-6 text-center text-secondary">

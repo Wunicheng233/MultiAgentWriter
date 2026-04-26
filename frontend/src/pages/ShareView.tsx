@@ -10,7 +10,7 @@ import { TableOfContents } from '../components/Reader/components/TableOfContents
 import { BookmarkPanel } from '../components/Reader/components/BookmarkPanel';
 import { SearchPanel } from '../components/Reader/components/SearchPanel';
 import { useReaderSettings } from '../components/Reader/hooks/useReaderSettings';
-import { Button } from '../components/Button';
+import { Button } from '../components/v2';
 import type { Project } from '../types/api';
 
 export const ShareView: React.FC = () => {

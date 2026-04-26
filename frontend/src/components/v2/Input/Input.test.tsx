@@ -20,13 +20,13 @@ describe('Input', () => {
     expect(screen.getByText(/invalid input/i)).toBeInTheDocument()
   })
 
-  it('renders prefix correctly', () => {
-    render(<Input prefix="https://" placeholder="example.com" />)
+  it('renders leftElement correctly', () => {
+    render(<Input leftElement="https://" placeholder="example.com" />)
     expect(screen.getByText(/https:\/\//i)).toBeInTheDocument()
   })
 
-  it('renders suffix correctly', () => {
-    render(<Input suffix="@gmail.com" placeholder="username" />)
+  it('renders rightElement correctly', () => {
+    render(<Input rightElement="@gmail.com" placeholder="username" />)
     expect(screen.getByText(/@gmail.com/i)).toBeInTheDocument()
   })
 

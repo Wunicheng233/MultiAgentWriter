@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { Input, Textarea } from './Input'
+import { Input } from './Input'
+import { Textarea } from './Textarea'
 
 const meta: Meta<typeof Input> = {
   title: 'v2/Input',
   component: Input,
   tags: ['autodocs'],
   argTypes: {
-    size: {
+    inputSize: {
       control: 'radio',
       options: ['sm', 'md', 'lg'],
     },
@@ -43,24 +44,23 @@ export const WithError: Story = {
   },
 }
 
-export const WithPrefix: Story = {
+export const WithLeftElement: Story = {
   args: {
     label: 'Website',
-    prefix: 'https://',
+    leftElement: 'https://',
     placeholder: 'example.com',
   },
 }
 
-export const WithSuffix: Story = {
+export const WithRightElement: Story = {
   args: {
     label: 'Username',
-    suffix: '@gmail.com',
+    rightElement: '@gmail.com',
     placeholder: 'yourname',
   },
 }
 
 export const TextareaStory: StoryObj<typeof Textarea> = {
-  render: (args) => <Textarea {...args} />,
   args: {
     label: 'Description',
     placeholder: 'Enter a detailed description...',

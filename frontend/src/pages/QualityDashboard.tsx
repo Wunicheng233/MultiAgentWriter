@@ -6,11 +6,8 @@ import { LineChart, RadarChart } from 'echarts/charts'
 import { GridComponent, RadarComponent, TooltipComponent } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import type { BadgeVariant } from '../components/Badge'
-import { Button } from '../components/Button'
-import { ProgressBar } from '../components/ProgressBar'
+import { Card, Badge, Button, Progress } from '../components/v2'
+import type { BadgeVariant } from '../components/v2'
 import { getProject, getProjectAnalytics } from '../utils/endpoints'
 import { getProjectStatusText } from '../utils/workflow'
 
@@ -24,10 +21,10 @@ echarts.use([
 ])
 
 function getScoreColor(score: number): BadgeVariant {
-  if (score >= 8) return 'agent'
-  if (score >= 6) return 'status'
+  if (score >= 8) return 'success'
+  if (score >= 6) return 'warning'
   if (score >= 4) return 'secondary'
-  return 'genre'
+  return 'error'
 }
 
 export const QualityDashboard: React.FC = () => {
@@ -240,7 +237,8 @@ export const QualityDashboard: React.FC = () => {
             </div>
 
             <div className="w-full max-w-xl space-y-3">
-              <ProgressBar progress={analytics.overall_quality_score * 10} message={`总体质量 ${analytics.overall_quality_score.toFixed(1)}/10`} />
+              <p className="text-sm text-[var(--text-secondary)]">总体质量 {analytics.overall_quality_score.toFixed(1)}/10</p>
+              <Progress value={analytics.overall_quality_score * 10} />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4 text-sm">
                 <div className="rounded-lg border border-[var(--border-default)] bg-[var(--bg-tertiary)] p-3">
                   <p className="text-[var(--text-secondary)]">总章节数</p>
@@ -395,7 +393,8 @@ export const QualityDashboard: React.FC = () => {
                       <Badge variant="secondary">{chapter.status}</Badge>
                     </div>
                     <div className="mt-3 max-w-md">
-                      <ProgressBar progress={chapter.quality_score * 10} message={`章节评分 ${chapter.quality_score.toFixed(1)}/10`} />
+                      <p className="text-sm text-[var(--text-secondary)] mb-2">章节评分 {chapter.quality_score.toFixed(1)}/10</p>
+                      <Progress value={chapter.quality_score * 10} />
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

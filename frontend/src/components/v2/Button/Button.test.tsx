@@ -14,7 +14,7 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveClass(/accent-primary/)
 
     rerender(<Button variant="danger">Danger</Button>)
-    expect(screen.getByRole('button')).toHaveClass(/bg-red-500/)
+    expect(screen.getByRole('button')).toHaveClass(/text-rose-700/)
   })
 
   it('applies size correctly', () => {

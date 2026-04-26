@@ -1,0 +1,228 @@
+import React, { createContext, useContext, useState, useRef, useCallback } from 'react'
+import { useClickOutside } from '../hooks/useClickOutside'
+
+interface DropdownMenuContextValue {
+  open: boolean
+  setOpen: (open: boolean) => void
+  triggerRef: React.RefObject<HTMLDivElement | null>
+  contentRef: React.RefObject<HTMLDivElement | null>
+}
+
+const DropdownMenuContext = createContext<DropdownMenuContextValue | null>(null)
+
+export interface DropdownMenuProps {
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: React.ReactNode
+}
+
+export const DropdownMenu: React.FC<DropdownMenuProps> = ({
+  open: openProp,
+  onOpenChange,
+  children,
+}) => {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = openProp !== undefined ? openProp : internalOpen
+
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  const setOpen = useCallback((newOpen: boolean) => {
+    if (openProp === undefined) {
+      setInternalOpen(newOpen)
+    }
+    onOpenChange?.(newOpen)
+  }, [openProp, onOpenChange])
+
+  // Close on click outside
+  useClickOutside(contentRef, (e) => {
+    if (!triggerRef.current?.contains(e.target as Node)) {
+      setOpen(false)
+    }
+  })
+
+  return (
+    <DropdownMenuContext.Provider value={{ open, setOpen, triggerRef, contentRef }}>
+      <div className="relative inline-block">{children}</div>
+    </DropdownMenuContext.Provider>
+  )
+}
+
+DropdownMenu.displayName = 'DropdownMenu'
+
+// DropdownMenuTrigger
+export interface DropdownMenuTriggerProps {
+  children: React.ReactNode
+}
+
+export const DropdownMenuTrigger: React.FC<DropdownMenuTriggerProps> = ({ children }) => {
+  const context = useContext(DropdownMenuContext)
+  if (!context) throw new Error('DropdownMenuTrigger must be used within DropdownMenu')
+
+  const { open, setOpen, triggerRef } = context
+
+  return (
+    <div
+      ref={triggerRef}
+      onClick={() => setOpen(!open)}
+      className="inline-block"
+    >
+      {children}
+    </div>
+  )
+}
+
+DropdownMenuTrigger.displayName = 'DropdownMenuTrigger'
+
+// DropdownMenuContent
+export interface DropdownMenuContentProps {
+  children: React.ReactNode
+  className?: string
+  align?: 'start' | 'center' | 'end'
+}
+
+const alignClasses = {
+  start: 'left-0',
+  center: 'left-1/2 -translate-x-1/2',
+  end: 'right-0',
+}
+
+export const DropdownMenuContent: React.FC<DropdownMenuContentProps> = ({
+  children,
+  className = '',
+  align = 'start',
+}) => {
+  const context = useContext(DropdownMenuContext)
+  if (!context) throw new Error('DropdownMenuContent must be used within DropdownMenu')
+
+  const { open, setOpen, contentRef } = context
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const items = Array.from(
+      contentRef.current?.querySelectorAll('[role="menuitem"]:not([data-disabled="true"])') || []
+    )
+    const currentIndex = items.findIndex(item => document.activeElement === item)
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const nextIndex = (currentIndex + 1) % items.length
+      ;(items[nextIndex] as HTMLElement)?.focus()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prevIndex = (currentIndex - 1 + items.length) % items.length
+      ;(items[prevIndex] as HTMLElement)?.focus()
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }, [contentRef, setOpen])
+
+  if (!open) return null
+
+  return (
+    <div
+      ref={contentRef}
+      role="menu"
+      onKeyDown={handleKeyDown}
+      className={`absolute z-50 min-w-[160px] py-1 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg shadow-lg top-full mt-1 ${alignClasses[align]} ${className}`.trim()}
+    >
+      {children}
+    </div>
+  )
+}
+
+DropdownMenuContent.displayName = 'DropdownMenuContent'
+
+// DropdownMenuItem
+export interface DropdownMenuItemProps {
+  children: React.ReactNode
+  disabled?: boolean
+  onSelect?: () => void
+  closeOnSelect?: boolean
+  className?: string
+}
+
+export const DropdownMenuItem: React.FC<DropdownMenuItemProps> = ({
+  children,
+  disabled = false,
+  onSelect,
+  closeOnSelect = true,
+  className = '',
+}) => {
+  const context = useContext(DropdownMenuContext)
+  if (!context) throw new Error('DropdownMenuItem must be used within DropdownMenu')
+
+  const { setOpen } = context
+
+  const handleClick = () => {
+    if (!disabled) {
+      onSelect?.()
+      if (closeOnSelect) {
+        setOpen(false)
+      }
+    }
+  }
+
+  return (
+    <div
+      role="menuitem"
+      data-disabled={disabled}
+      onClick={handleClick}
+      tabIndex={disabled ? -1 : 0}
+      className={`px-3 py-2 text-sm cursor-pointer transition-colors duration-100 outline-none text-[var(--text-body)] hover:bg-[var(--bg-tertiary)] focus:bg-[var(--bg-tertiary)] ${
+        disabled ? 'opacity-50 cursor-not-allowed' : ''
+      } ${className}`.trim()}
+    >
+      {children}
+    </div>
+  )
+}
+
+DropdownMenuItem.displayName = 'DropdownMenuItem'
+
+// DropdownMenuSeparator
+export interface DropdownMenuSeparatorProps {
+  className?: string
+}
+
+export const DropdownMenuSeparator: React.FC<DropdownMenuSeparatorProps> = ({ className = '' }) => {
+  return (
+    <div
+      role="separator"
+      className={`h-px my-1 bg-[var(--border-subtle)] ${className}`.trim()}
+    />
+  )
+}
+
+DropdownMenuSeparator.displayName = 'DropdownMenuSeparator'
+
+// DropdownMenuLabel
+export interface DropdownMenuLabelProps {
+  children: React.ReactNode
+  className?: string
+}
+
+export const DropdownMenuLabel: React.FC<DropdownMenuLabelProps> = ({ children, className = '' }) => {
+  return (
+    <div className={`px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] ${className}`.trim()}>
+      {children}
+    </div>
+  )
+}
+
+DropdownMenuLabel.displayName = 'DropdownMenuLabel'
+
+// DropdownMenuGroup
+export interface DropdownMenuGroupProps {
+  children: React.ReactNode
+  className?: string
+}
+
+export const DropdownMenuGroup: React.FC<DropdownMenuGroupProps> = ({ children, className = '' }) => {
+  return (
+    <div role="group" className={className}>
+      {children}
+    </div>
+  )
+}
+
+DropdownMenuGroup.displayName = 'DropdownMenuGroup'

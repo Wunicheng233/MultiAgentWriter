@@ -33,7 +33,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         )}
         <textarea ref={ref} rows={rows} className={`${baseClasses} ${className}`.trim()} {...props} />
         {errorMessage && (
-          <p className="text-sm text-red-500">{errorMessage}</p>
+          <p className="text-sm text-rose-600">{errorMessage}</p>
         )}
       </div>
     )

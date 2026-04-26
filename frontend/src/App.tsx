@@ -20,6 +20,7 @@ const Editor = lazy(() => import('./pages/Editor'))
 const QualityDashboard = lazy(() => import('./pages/QualityDashboard'))
 const ShareView = lazy(() => import('./pages/ShareView'))
 const Reader = lazy(() => import('./components/Reader/index'))
+const ComponentShowcase = lazy(() => import('./pages/ComponentShowcase'))
 
 import './App.css'
 
@@ -69,6 +70,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/share/:token" element={<ShareView />} />
+              <Route path="/showcase" element={<ComponentShowcase />} />
 
               {/* Protected routes with unified 3-column layout */}
               <Route element={<ProtectedLayout />}>

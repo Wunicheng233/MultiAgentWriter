@@ -3,13 +3,13 @@ import React, { forwardRef } from 'react'
 export type InputSize = 'sm' | 'md' | 'lg'
 export type InputStatus = 'default' | 'error' | 'success'
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'prefix'> {
   label?: string
-  size?: InputSize
+  inputSize?: InputSize
   status?: InputStatus
   errorMessage?: string
-  prefix?: React.ReactNode
-  suffix?: React.ReactNode
+  leftElement?: React.ReactNode
+  rightElement?: React.ReactNode
   fullWidth?: boolean
 }
 
@@ -21,18 +21,18 @@ const sizeClasses: Record<InputSize, string> = {
 
 const statusClasses: Record<InputStatus, string> = {
   default: 'border-[var(--border-default)] focus:border-[var(--accent-primary)]',
-  error: 'border-red-500 focus:border-red-600',
-  success: 'border-green-500 focus:border-green-600',
+  error: 'border-rose-200 focus:border-rose-300',
+  success: 'border-stone-300 focus:border-stone-400',
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({
     label,
-    size = 'md',
+    inputSize = 'md',
     status = 'default',
     errorMessage,
-    prefix,
-    suffix,
+    leftElement,
+    rightElement,
     fullWidth = false,
     className = '',
     ...props
@@ -48,11 +48,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     `
 
     const widthClass = fullWidth ? 'w-full' : ''
-    const hasAffix = prefix || suffix
+    const hasAffix = leftElement || rightElement
 
     const inputClasses = hasAffix
       ? 'bg-transparent border-0 focus:ring-0 w-full'
-      : `${baseClasses} ${sizeClasses[size]} ${statusClasses[status]} ${className}`.trim()
+      : `${baseClasses} ${sizeClasses[inputSize]} ${statusClasses[status]} ${className}`.trim()
 
     if (hasAffix) {
       return (
@@ -64,14 +64,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
           <div className={`
             flex items-center gap-2
-            ${baseClasses} ${sizeClasses[size]} ${statusClasses[status]} ${className}
+            ${baseClasses} ${sizeClasses[inputSize]} ${statusClasses[status]} ${className}
           `.trim()}>
-            {prefix && <span className="text-[var(--text-muted)]">{prefix}</span>}
+            {leftElement && <span className="text-[var(--text-muted)]">{leftElement}</span>}
             <input ref={ref} className="w-full bg-transparent border-0 focus:ring-0 outline-none" {...props} />
-            {suffix && <span className="text-[var(--text-muted)]">{suffix}</span>}
+            {rightElement && <span className="text-[var(--text-muted)]">{rightElement}</span>}
           </div>
           {status === 'error' && errorMessage && (
-            <p className="text-sm text-red-500">{errorMessage}</p>
+            <p className="text-sm text-rose-600">{errorMessage}</p>
           )}
         </div>
       )
@@ -86,7 +86,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <input ref={ref} className={inputClasses} {...props} />
         {status === 'error' && errorMessage && (
-          <p className="text-sm text-red-500">{errorMessage}</p>
+          <p className="text-sm text-rose-600">{errorMessage}</p>
         )}
       </div>
     )

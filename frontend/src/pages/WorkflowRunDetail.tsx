@@ -2,10 +2,8 @@ import React from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import type { BadgeVariant } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Card, Badge, Button } from '../components/v2'
+import type { BadgeVariant } from '../components/v2'
 import {
   cleanStuckTasks,
   getProjectArtifacts,
@@ -26,13 +24,13 @@ import {
 function getRunStatusColor(status: string): BadgeVariant {
   switch (status) {
     case 'completed':
-      return 'agent'
+      return 'success'
     case 'running':
     case 'waiting_confirm':
-      return 'status'
+      return 'warning'
     case 'failed':
     case 'cancelled':
-      return 'genre'
+      return 'error'
     default:
       return 'secondary'
   }

@@ -2,12 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
-import { Card } from '../components/Card'
-import { Badge } from '../components/Badge'
-import type { BadgeVariant } from '../components/Badge'
-import { Button } from '../components/Button'
-import { Input } from '../components/Input'
-import { ProgressBar } from '../components/ProgressBar'
+import { Card, Badge, Button, Input, Progress } from '../components/v2'
+import type { BadgeVariant } from '../components/v2'
 import SkillSelector from '../components/SkillSelector'
 import {
   addCollaborator,
@@ -116,13 +112,13 @@ function getProjectStatusColor(status: string): BadgeVariant {
     case 'draft':
       return 'secondary'
     case 'generating':
-      return 'status'
+      return 'warning'
     case 'completed':
-      return 'agent'
+      return 'success'
     case 'failed':
-      return 'genre'
+      return 'error'
     default:
-      return 'genre'
+      return 'secondary'
   }
 }
 
@@ -131,15 +127,15 @@ function getTaskStatusColor(task?: GenerationTask | null): BadgeVariant {
 
   switch (task.status) {
     case 'success':
-      return 'agent'
+      return 'success'
     case 'waiting_confirm':
-      return 'genre'
+      return 'warning'
     case 'failure':
-      return 'genre'
+      return 'error'
     case 'progress':
     case 'started':
     case 'pending':
-      return 'status'
+      return 'warning'
     default:
       return 'secondary'
   }
@@ -303,7 +299,7 @@ export const ProjectOverview: React.FC = () => {
   const [exportPollingId, setExportPollingId] = useState<string | null>(null)
   const [exportTaskId, setExportTaskId] = useState<number | null>(null)
   const [exportProgress, setExportProgress] = useState(0)
-  const [exportStep, setExportStep] = useState('')
+  const [, setExportStep] = useState('')
   const [creatingShare, setCreatingShare] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [newCollaboratorUsername, setNewCollaboratorUsername] = useState('')
@@ -593,10 +589,7 @@ export const ProjectOverview: React.FC = () => {
               <p className="mt-2 text-[var(--text-secondary)]">{runSummary.detail}</p>
 
               <div className="mt-6">
-                <ProgressBar
-                  progress={workflowProgress}
-                  message={data.current_generation_task?.current_step || `已完成 ${completedChapters}/${targetChapters || completedChapters || 1} 章`}
-                />
+                <Progress value={workflowProgress} />
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
@@ -618,7 +611,7 @@ export const ProjectOverview: React.FC = () => {
         </Card>
 
         {exportPollingId && (
-          <ProgressBar progress={exportProgress} message={exportStep || '导出中...'} />
+          <Progress value={exportProgress} />
         )}
 
         <div className="grid gap-3 rounded-comfortable border border-border bg-white/35 p-2 shadow-ambient md:grid-cols-3">
@@ -915,7 +908,10 @@ export const ProjectOverview: React.FC = () => {
 
               <div className="mt-6 space-y-4">
                 {data.overall_quality_score > 0 ? (
-                  <ProgressBar progress={data.overall_quality_score * 10} message={`总体评分 ${data.overall_quality_score.toFixed(1)}/10`} />
+                  <div>
+                    <p className="text-sm text-[var(--text-secondary)] mb-2">总体评分 {data.overall_quality_score.toFixed(1)}/10</p>
+                    <Progress value={data.overall_quality_score * 10} />
+                  </div>
                 ) : (
                   <div className="rounded-standard border border-dashed border-border p-4 text-[var(--text-secondary)]">
                     尚无评分数据。完成至少一章评审后，这里会显示质量闭环结果。
