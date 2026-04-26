@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ProjectHeader } from './ProjectHeader'
 
@@ -7,10 +7,12 @@ vi.mock('../../store/useProjectStore', () => ({
   useProjectStore: vi.fn(),
 }))
 
+const mockToggleHeader = vi.fn()
+
 vi.mock('../../store/useLayoutStore', () => ({
   useLayoutStore: vi.fn(() => ({
     headerCollapsed: false,
-    toggleHeader: vi.fn(),
+    toggleHeader: mockToggleHeader,
   })),
 }))
 
@@ -23,6 +25,10 @@ vi.mock('react-router-dom', async () => {
 })
 
 describe('ProjectHeader', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('renders project name and status correctly', async () => {
     const { useProjectStore } = await import('../../store/useProjectStore')
     vi.mocked(useProjectStore).mockReturnValue({
@@ -69,5 +75,67 @@ describe('ProjectHeader', () => {
     render(<ProjectHeader />)
     await fireEvent.click(screen.getByText('书架'))
     expect(mockClear).toHaveBeenCalled()
+  })
+
+  describe('折叠功能', () => {
+    beforeEach(async () => {
+      const { useProjectStore } = await import('../../store/useProjectStore')
+      vi.mocked(useProjectStore).mockReturnValue({
+        currentProjectName: '测试项目',
+        projectStatus: 'draft',
+        progressPercent: 0,
+        clearCurrentProject: vi.fn(),
+      })
+    })
+
+    it('收起时内容不可见', async () => {
+      const { useLayoutStore } = await import('../../store/useLayoutStore')
+      vi.mocked(useLayoutStore).mockReturnValue({
+        headerCollapsed: true,
+        toggleHeader: mockToggleHeader,
+      })
+
+      render(<ProjectHeader />)
+      const header = screen.getByTestId('project-header')
+      expect(header).toHaveClass('header-collapsed')
+    })
+
+    it('展开时内容可见', async () => {
+      const { useLayoutStore } = await import('../../store/useLayoutStore')
+      vi.mocked(useLayoutStore).mockReturnValue({
+        headerCollapsed: false,
+        toggleHeader: mockToggleHeader,
+      })
+
+      render(<ProjectHeader />)
+      const header = screen.getByTestId('project-header')
+      expect(header).toHaveClass('header-expanded')
+    })
+
+    it('双击顶栏调用 toggleHeader', async () => {
+      const { useLayoutStore } = await import('../../store/useLayoutStore')
+      vi.mocked(useLayoutStore).mockReturnValue({
+        headerCollapsed: false,
+        toggleHeader: mockToggleHeader,
+      })
+
+      render(<ProjectHeader />)
+      const header = screen.getByTestId('project-header')
+      await fireEvent.doubleClick(header)
+      expect(mockToggleHeader).toHaveBeenCalledTimes(1)
+    })
+
+    it('点击收起状态的顶栏调用 toggleHeader', async () => {
+      const { useLayoutStore } = await import('../../store/useLayoutStore')
+      vi.mocked(useLayoutStore).mockReturnValue({
+        headerCollapsed: true,
+        toggleHeader: mockToggleHeader,
+      })
+
+      render(<ProjectHeader />)
+      const header = screen.getByTestId('project-header')
+      await fireEvent.click(header)
+      expect(mockToggleHeader).toHaveBeenCalledTimes(1)
+    })
   })
 })

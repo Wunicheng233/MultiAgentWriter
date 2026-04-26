@@ -161,58 +161,44 @@ export const NavRail: React.FC<NavRailProps> = React.memo(({ collapsed, onToggle
     setHovered(false)
   }, [])
 
-  // When collapsed and hovered, expand temporarily
-  const effectiveCollapsed = collapsed && !hovered
+  // Collapsed width: 56px, Expanded width: 64px
+  // When collapsed and hovered, show tooltip on nav items
+  const navWidth = collapsed ? '56px' : '64px'
 
   return (
     <nav
-      className={`h-full flex flex-col items-center py-4 bg-[var(--bg-secondary)] transition-all duration-200 ease-out nav-rail ${
-        effectiveCollapsed ? 'justify-center' : 'justify-between'
-      } ${!collapsed ? 'nav-expanded' : ''}`}
-      style={{ width: collapsed && !hovered ? '12px' : '64px' }}
+      className={`h-full flex flex-col justify-between items-center py-4 bg-[var(--bg-secondary)] transition-all duration-200 ease-out nav-rail ${collapsed ? 'nav-collapsed' : 'nav-expanded'}`}
+      style={{ width: navWidth }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       data-testid="nav-rail"
       aria-label="Main navigation"
     >
-      {effectiveCollapsed ? (
-        // When fully collapsed: show just the expand button
-        <button
-          onClick={onToggleCollapse}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50"
-          title="展开侧边栏"
-          aria-label="展开侧边栏"
-          data-testid="collapse-button"
-        >
-          <span style={{ transform: 'rotate(180deg)', display: 'inline-block' }}>
-              <CollapseIcon />
-            </span>
-        </button>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3 items-center" role="menubar">
-            {navItems.map((item) => (
-              <NavItem
-                key={item.id}
-                icon={item.icon}
-                label={item.label}
-                active={isActive(item.path)}
-                onClick={() => handleNavigate(item.path)}
-              />
-            ))}
-          </div>
+      {/* Navigation Items */}
+      <div className="flex flex-col gap-3 items-center" role="menubar">
+        {navItems.map((item) => (
+          <NavItem
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={isActive(item.path)}
+            onClick={() => handleNavigate(item.path)}
+          />
+        ))}
+      </div>
 
-          <button
-            onClick={onToggleCollapse}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50"
-            title="收起侧边栏"
-            aria-label="收起侧边栏"
-            data-testid="collapse-button"
-          >
-            <CollapseIcon />
-          </button>
-        </>
-      )}
+      {/* Collapse/Expand Button at the bottom */}
+      <button
+        onClick={onToggleCollapse}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-opacity-50"
+        title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+        aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+        data-testid="collapse-button"
+      >
+        <span style={{ transform: collapsed ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 200ms ease-out' }}>
+          <CollapseIcon />
+        </span>
+      </button>
     </nav>
   )
 })

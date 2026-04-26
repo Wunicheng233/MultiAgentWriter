@@ -141,13 +141,21 @@ describe('NavRail', () => {
       expect(mockToggleCollapse).toHaveBeenCalledTimes(1)
     })
 
-    it('完全折叠时只显示展开按钮', () => {
+    it('收起时显示所有导航项图标和展开按钮', () => {
       renderWithRouter(<NavRail collapsed={true} onToggleCollapse={mockToggleCollapse} />)
 
       const collapseButton = screen.getByTestId('collapse-button')
       expect(collapseButton).toBeInTheDocument()
 
-      expect(screen.queryAllByTestId('nav-item')).toHaveLength(0)
+      const navItems = screen.getAllByTestId('nav-item')
+      expect(navItems).toHaveLength(2)
+    })
+
+    it('收起时宽度为 56px，只显示图标', () => {
+      renderWithRouter(<NavRail collapsed={true} onToggleCollapse={mockToggleCollapse} />)
+
+      const navRail = screen.getByTestId('nav-rail')
+      expect(navRail).toHaveStyle({ width: '56px' })
     })
 
     it('展开时显示所有导航项和折叠按钮', () => {
@@ -158,6 +166,22 @@ describe('NavRail', () => {
 
       expect(navItems).toHaveLength(2)
       expect(collapseButton).toBeInTheDocument()
+    })
+
+    it('底部有折叠按钮', () => {
+      renderWithRouter(<NavRail collapsed={false} onToggleCollapse={mockToggleCollapse} />)
+
+      const collapseButton = screen.getByTestId('collapse-button')
+      expect(collapseButton).toBeInTheDocument()
+    })
+
+    it('点击折叠按钮调用 onToggleCollapse', async () => {
+      renderWithRouter(<NavRail collapsed={false} onToggleCollapse={mockToggleCollapse} />)
+
+      const collapseButton = screen.getByTestId('collapse-button')
+      await fireEvent.click(collapseButton)
+
+      expect(mockToggleCollapse).toHaveBeenCalledTimes(1)
     })
   })
 
