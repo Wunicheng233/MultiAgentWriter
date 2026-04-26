@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Crimson+Pro:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Crimson+Pro:wght@400;500&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+@import './components/v2/themes/tokens.css';
 
 @tailwind base;
 @tailwind components;
@@ -127,12 +129,14 @@
     min-height: 100vh;
     background-color: var(--bg-primary);
     color: var(--text-body);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Serif font for narrative content */
+  /* Serif font for narrative content - 中英文衬线体配对 */
   .font-serif {
-    font-family: 'Crimson Pro', Georgia, serif;
+    font-family: 'Crimson Pro', 'Noto Serif SC', Georgia, serif;
   }
 
   /* Focus styles for accessibility */
@@ -166,12 +170,63 @@
   opacity: 1;
 }
 
-/* Typography for editor content */
+/* Novel Editor - 纸张感正文排版 */
+.prose-novel {
+  font-family: 'Crimson Pro', 'Noto Serif SC', Georgia, 'PingFang SC', 'Microsoft YaHei', serif;
+  font-size: 18px;
+  line-height: 1.85;
+  letter-spacing: 0.02em;
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.prose-novel p {
+  margin-bottom: 1.5em;
+  text-indent: 2em;    /* 中文首行缩进，真正的"书籍感" */
+}
+
+.prose-novel h1,
+.prose-novel h2,
+.prose-novel h3 {
+  font-family: 'Crimson Pro', 'Noto Serif SC', Georgia, serif;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 2em;
+  margin-bottom: 0.8em;
+  letter-spacing: 0.05em;
+  text-indent: 0;
+}
+
+.prose-novel h1 { font-size: 1.8em; }
+.prose-novel h2 { font-size: 1.5em; }
+.prose-novel h3 { font-size: 1.2em; }
+
+.prose-novel strong,
+.prose-novel b {
+  font-weight: 600;
+}
+
+.prose-novel em,
+.prose-novel i {
+  font-style: italic;
+}
+
+.prose-novel blockquote {
+  margin: 1.5em 0;
+  padding-left: 1.5em;
+  border-left: 3px solid var(--accent-primary);
+  color: var(--text-secondary);
+  font-style: italic;
+  text-indent: 0;
+}
+
+/* Typography for UI content - 保持无衬线，快速阅读 */
 .editor-content {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  line-height: 1.7;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.8;
   font-size: 17px;
   color: var(--text-body);
+  letter-spacing: 0.02em;
 }
 
 .editor-content h1,
