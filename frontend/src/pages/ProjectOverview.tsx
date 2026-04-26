@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
 import { Card, Badge, Button, Input, Progress, AgentCard } from '../components/v2'
+import { useLayoutStore } from '../store/useLayoutStore'
 import type { BadgeVariant } from '../components/v2'
 import SkillSelector from '../components/SkillSelector'
 import {
@@ -349,6 +350,14 @@ export const ProjectOverview: React.FC = () => {
       end_chapter: data.config.end_chapter ?? 10,
     })
   }, [data])
+
+  const { autoExpandHeaderInProject, setHeaderCollapsed } = useLayoutStore()
+
+  useEffect(() => {
+    if (id && autoExpandHeaderInProject) {
+      setHeaderCollapsed(false)
+    }
+  }, [id, autoExpandHeaderInProject, setHeaderCollapsed])
 
   useEffect(() => {
     if (!data?.current_generation_task) return
