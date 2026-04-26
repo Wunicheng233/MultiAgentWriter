@@ -66,6 +66,8 @@ export const DropdownMenuTrigger: React.FC<DropdownMenuTriggerProps> = ({ childr
       ref={triggerRef}
       onClick={() => setOpen(!open)}
       className="inline-block"
+      aria-expanded={open}
+      aria-haspopup="menu"
     >
       {children}
     </div>
@@ -116,14 +118,14 @@ export const DropdownMenuContent: React.FC<DropdownMenuContentProps> = ({
     }
   }, [contentRef, setOpen])
 
-  if (!open) return null
-
   return (
     <div
       ref={contentRef}
       role="menu"
       onKeyDown={handleKeyDown}
-      className={`absolute z-50 min-w-[160px] py-1 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg shadow-lg top-full mt-1 ${alignClasses[align]} ${className}`.trim()}
+      className={`absolute z-50 min-w-[160px] py-1 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg shadow-lg top-full mt-1 transition-all duration-150 ease-out ${alignClasses[align]} ${
+        open ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0 pointer-events-none'
+      } ${className}`.trim()}
     >
       {children}
     </div>

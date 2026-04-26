@@ -61,7 +61,7 @@ describe('DropdownMenu', () => {
 
     expect(onSelect).toHaveBeenCalledWith('item1')
     await waitFor(() => {
-      expect(screen.queryByText('Item 1')).not.toBeInTheDocument()
+      expect(screen.getByText('Item 1').parentElement).toHaveClass('opacity-0')
     })
   })
 

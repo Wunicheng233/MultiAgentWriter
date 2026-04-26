@@ -45,11 +45,11 @@ describe('Popover', () => {
     )
 
     await fireEvent.click(screen.getByText('Open'))
-    expect(screen.getByText('Popover content')).toBeInTheDocument()
+    expect(screen.getByText('Popover content')).toHaveClass('opacity-100')
 
     await fireEvent.mouseDown(screen.getByTestId('outside'))
     await waitFor(() => {
-      expect(screen.queryByText('Popover content')).not.toBeInTheDocument()
+      expect(screen.getByText('Popover content')).toHaveClass('opacity-0')
     })
   })
 
@@ -64,11 +64,11 @@ describe('Popover', () => {
     )
 
     await fireEvent.click(screen.getByText('Open'))
-    expect(screen.getByText('Popover content')).toBeInTheDocument()
+    expect(screen.getByText('Popover content')).toHaveClass('opacity-100')
 
     await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     await waitFor(() => {
-      expect(screen.queryByText('Popover content')).not.toBeInTheDocument()
+      expect(screen.getByText('Popover content')).toHaveClass('opacity-0')
     })
   })
 })

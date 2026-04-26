@@ -66,6 +66,8 @@ export const PopoverTrigger: React.FC<PopoverTriggerProps> = ({ children }) => {
       ref={triggerRef}
       onClick={() => setOpen(!open)}
       className="inline-block"
+      aria-expanded={open}
+      aria-haspopup="dialog"
     >
       {children}
     </div>
@@ -95,6 +97,20 @@ const sideClasses = {
   right: 'left-full ml-2',
 }
 
+const visibleTransformClasses: Record<string, string> = {
+  top: 'translate-y-0 opacity-100',
+  bottom: 'translate-y-0 opacity-100',
+  left: 'translate-x-0 opacity-100',
+  right: 'translate-x-0 opacity-100',
+}
+
+const hiddenTransformClasses: Record<string, string> = {
+  top: 'translate-y-2 opacity-0 pointer-events-none',
+  bottom: '-translate-y-2 opacity-0 pointer-events-none',
+  left: 'translate-x-2 opacity-0 pointer-events-none',
+  right: '-translate-x-2 opacity-0 pointer-events-none',
+}
+
 export const PopoverContent: React.FC<PopoverContentProps> = ({
   children,
   className = '',
@@ -112,15 +128,16 @@ export const PopoverContent: React.FC<PopoverContentProps> = ({
     }
   }, [setOpen])
 
-  if (!open) return null
-
   return (
     <div
       ref={contentRef}
       role="dialog"
+      aria-modal="true"
       onKeyDown={handleKeyDown}
       tabIndex={-1}
-      className={`absolute z-50 min-w-[200px] p-4 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg shadow-lg ${sideClasses[side]} ${alignClasses[align]} ${className}`.trim()}
+      className={`absolute z-50 min-w-[200px] p-4 bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-lg shadow-lg transition-all duration-150 ease-out ${sideClasses[side]} ${alignClasses[align]} ${
+        open ? visibleTransformClasses[side] : hiddenTransformClasses[side]
+      } ${className}`.trim()}
     >
       {children}
     </div>

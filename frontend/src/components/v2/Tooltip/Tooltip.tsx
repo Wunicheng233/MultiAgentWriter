@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useId } from 'react'
 
 export type TooltipPosition = 'top' | 'right' | 'bottom' | 'left'
 
@@ -15,6 +15,20 @@ const positionClasses: Record<TooltipPosition, string> = {
   right: 'left-full top-1/2 -translate-y-1/2 ml-2',
   bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
   left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+}
+
+const visibleTransformClasses: Record<TooltipPosition, string> = {
+  top: 'translate-y-0 opacity-100',
+  right: 'translate-x-0 opacity-100',
+  bottom: 'translate-y-0 opacity-100',
+  left: 'translate-x-0 opacity-100',
+}
+
+const hiddenTransformClasses: Record<TooltipPosition, string> = {
+  top: 'translate-y-2 opacity-0 pointer-events-none',
+  right: 'translate-x-2 opacity-0 pointer-events-none',
+  bottom: '-translate-y-2 opacity-0 pointer-events-none',
+  left: '-translate-x-2 opacity-0 pointer-events-none',
 }
 
 const arrowClasses: Record<TooltipPosition, string> = {
@@ -34,6 +48,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   const [isVisible, setIsVisible] = useState(false)
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tooltipId = useId()
 
   const handleMouseEnter = useCallback(() => {
     if (hideTimeoutRef.current) {
@@ -88,24 +103,27 @@ export const Tooltip: React.FC<TooltipProps> = ({
       onFocus={handleFocus}
       onBlur={handleBlur}
     >
-      {React.cloneElement(child)}
+      {React.cloneElement(child, {
+        'aria-describedby': tooltipId,
+      })}
 
-      {isVisible && content && (
+      <div
+        id={tooltipId}
+        className={`absolute z-40 ${positionClasses[position]} transition-all duration-150 ease-out ${
+          isVisible && content ? visibleTransformClasses[position] : hiddenTransformClasses[position]
+        }`}
+      >
         <div
-          className={`absolute z-40 ${positionClasses[position]} transition-opacity duration-[var(--duration-normal)] ease-[var(--ease-out)]`}
+          className={`px-3 py-1.5 text-xs font-medium text-white bg-[var(--text-primary)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] whitespace-nowrap ${className}`.trim()}
+          role="tooltip"
         >
-          <div
-            className={`px-3 py-1.5 text-xs font-medium text-white bg-[var(--text-primary)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] whitespace-nowrap ${className}`.trim()}
-            role="tooltip"
-          >
-            {content}
-          </div>
-          {/* Arrow */}
-          <div
-            className={`absolute w-0 h-0 border-4 border-transparent ${arrowClasses[position]}`}
-          />
+          {content}
         </div>
-      )}
+        {/* Arrow */}
+        <div
+          className={`absolute w-0 h-0 border-4 border-transparent ${arrowClasses[position]}`}
+        />
+      </div>
     </span>
   )
 }

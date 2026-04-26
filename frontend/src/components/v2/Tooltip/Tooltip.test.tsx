@@ -4,13 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { Tooltip } from './Tooltip'
 
 describe('Tooltip', () => {
-  it('does not render tooltip content by default', () => {
+  it('does not show tooltip content by default', () => {
     render(
       <Tooltip content="Tooltip text">
         <button>Hover me</button>
       </Tooltip>
     )
-    expect(screen.queryByText(/Tooltip text/i)).not.toBeInTheDocument()
+    const tooltipWrapper = screen.getByText(/Tooltip text/i).parentElement
+    expect(tooltipWrapper).toHaveClass('opacity-0')
   })
 
   it('shows tooltip content on mouse enter', async () => {
@@ -37,12 +38,12 @@ describe('Tooltip', () => {
 
     await user.hover(screen.getByText(/Hover me/i))
     await waitFor(() => {
-      expect(screen.getByText(/Tooltip text/i)).toBeInTheDocument()
+      expect(screen.getByText(/Tooltip text/i).parentElement).toHaveClass('opacity-100')
     })
 
     await user.unhover(screen.getByText(/Hover me/i))
     await waitFor(() => {
-      expect(screen.queryByText(/Tooltip text/i)).not.toBeInTheDocument()
+      expect(screen.getByText(/Tooltip text/i).parentElement).toHaveClass('opacity-0')
     })
   })
 
@@ -92,12 +93,12 @@ describe('Tooltip', () => {
 
     fireEvent.focus(screen.getByText(/Focus me/i))
     await waitFor(() => {
-      expect(screen.getByText(/Focus tooltip/i)).toBeInTheDocument()
+      expect(screen.getByText(/Focus tooltip/i).parentElement).toHaveClass('opacity-100')
     })
 
     fireEvent.blur(screen.getByText(/Focus me/i))
     await waitFor(() => {
-      expect(screen.queryByText(/Focus tooltip/i)).not.toBeInTheDocument()
+      expect(screen.getByText(/Focus tooltip/i).parentElement).toHaveClass('opacity-0')
     })
   })
 
